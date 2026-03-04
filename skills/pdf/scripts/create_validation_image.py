@@ -11,13 +11,13 @@ from PIL import Image, ImageDraw
 def create_validation_image(page_number, fields_json_path, input_path, output_path):
     # Input file should be in the `fields.json` format described in forms.md.
     with open(fields_json_path, 'r') as f:
-        data = json.load(f)
+        fields_data = json.load(f)
 
         img = Image.open(input_path)
         draw = ImageDraw.Draw(img)
         num_boxes = 0
         
-        for field in data["form_fields"]:
+        for field in fields_data["form_fields"]:
             if field["page_number"] == page_number:
                 entry_box = field['entry_bounding_box']
                 label_box = field['label_bounding_box']
