@@ -20,37 +20,37 @@ def get_bounding_box_messages(fields_json_stream) -> list[str]:
     fields = json.load(fields_json_stream)
     messages.append(f"Read {len(fields['form_fields'])} fields")
 
-    def rects_intersect(r1, r2):
-        disjoint_horizontal = r1[0] >= r2[2] or r1[2] <= r2[0]
-        disjoint_vertical = r1[1] >= r2[3] or r1[3] <= r2[1]
+    def rects_intersect(rect1, rect2):
+        disjoint_horizontal = rect1[0] >= rect2[2] or rect1[2] <= rect2[0]
+        disjoint_vertical = rect1[1] >= rect2[3] or rect1[3] <= rect2[1]
         return not (disjoint_horizontal or disjoint_vertical)
 
     rects_and_fields = []
-    for f in fields["form_fields"]:
-        rects_and_fields.append(RectAndField(f["label_bounding_box"], "label", f))
-        rects_and_fields.append(RectAndField(f["entry_bounding_box"], "entry", f))
+    for field in fields["form_fields"]:
+        rects_and_fields.append(RectAndField(field["label_bounding_box"], "label", field))
+        rects_and_fields.append(RectAndField(field["entry_bounding_box"], "entry", field))
 
     has_error = False
-    for i, ri in enumerate(rects_and_fields):
+    for i, current_item in enumerate(rects_and_fields):
         # This is O(N^2); we can optimize if it becomes a problem.
         for j in range(i + 1, len(rects_and_fields)):
-            rj = rects_and_fields[j]
-            if ri.field["page_number"] == rj.field["page_number"] and rects_intersect(ri.rect, rj.rect):
+            other_item = rects_and_fields[j]
+            if current_item.field["page_number"] == other_item.field["page_number"] and rects_intersect(current_item.rect, other_item.rect):
                 has_error = True
-                if ri.field is rj.field:
-                    messages.append(f"FAILURE: intersection between label and entry bounding boxes for `{ri.field['description']}` ({ri.rect}, {rj.rect})")
+                if current_item.field is other_item.field:
+                    messages.append(f"FAILURE: intersection between label and entry bounding boxes for `{current_item.field['description']}` ({current_item.rect}, {other_item.rect})")
                 else:
-                    messages.append(f"FAILURE: intersection between {ri.rect_type} bounding box for `{ri.field['description']}` ({ri.rect}) and {rj.rect_type} bounding box for `{rj.field['description']}` ({rj.rect})")
+                    messages.append(f"FAILURE: intersection between {current_item.rect_type} bounding box for `{current_item.field['description']}` ({current_item.rect}) and {other_item.rect_type} bounding box for `{other_item.field['description']}` ({other_item.rect})")
                 if len(messages) >= 20:
                     messages.append("Aborting further checks; fix bounding boxes and try again")
                     return messages
-        if ri.rect_type == "entry":
-            if "entry_text" in ri.field:
-                font_size = ri.field["entry_text"].get("font_size", 14)
-                entry_height = ri.rect[3] - ri.rect[1]
+        if current_item.rect_type == "entry":
+            if "entry_text" in current_item.field:
+                font_size = current_item.field["entry_text"].get("font_size", 14)
+                entry_height = current_item.rect[3] - current_item.rect[1]
                 if entry_height < font_size:
                     has_error = True
-                    messages.append(f"FAILURE: entry bounding box height ({entry_height}) for `{ri.field['description']}` is too short for the text content (font size: {font_size}). Increase the box height or decrease the font size.")
+                    messages.append(f"FAILURE: entry bounding box height ({entry_height}) for `{current_item.field['description']}` is too short for the text content (font size: {font_size}). Increase the box height or decrease the font size.")
                     if len(messages) >= 20:
                         messages.append("Aborting further checks; fix bounding boxes and try again")
                         return messages

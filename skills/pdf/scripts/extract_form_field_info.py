@@ -21,10 +21,10 @@ def get_full_annotation_field_id(annotation):
 
 def make_field_dict(field, field_id):
     field_dict = {"field_id": field_id}
-    ft = field.get('/FT')
-    if ft == "/Tx":
+    field_type = field.get('/FT')
+    if field_type == "/Tx":
         field_dict["type"] = "text"
-    elif ft == "/Btn":
+    elif field_type == "/Btn":
         field_dict["type"] = "checkbox"  # radio groups handled separately
         states = field.get("/_States_", [])
         if len(states) == 2:
@@ -38,7 +38,7 @@ def make_field_dict(field, field_id):
                 print(f"Unexpected state values for checkbox `${field_id}`. Its checked and unchecked values may not be correct; if you're trying to check it, visually verify the results.")
                 field_dict["checked_value"] = states[0]
                 field_dict["unchecked_value"] = states[1]
-    elif ft == "/Ch":
+    elif field_type == "/Ch":
         field_dict["type"] = "choice"
         states = field.get("/_States_", [])
         field_dict["choice_options"] = [{
@@ -46,7 +46,7 @@ def make_field_dict(field, field_id):
             "text": state[1],
         } for state in states]
     else:
-        field_dict["type"] = f"unknown ({ft})"
+        field_dict["type"] = f"unknown ({field_type})"
     return field_dict
 
 
@@ -83,20 +83,20 @@ def get_field_info(reader: PdfReader):
 
     for page_index, page in enumerate(reader.pages):
         annotations = page.get('/Annots', [])
-        for ann in annotations:
-            field_id = get_full_annotation_field_id(ann)
+        for annotation in annotations:
+            field_id = get_full_annotation_field_id(annotation)
             if field_id in field_info_by_id:
                 field_info_by_id[field_id]["page"] = page_index + 1
-                field_info_by_id[field_id]["rect"] = ann.get('/Rect')
+                field_info_by_id[field_id]["rect"] = annotation.get('/Rect')
             elif field_id in possible_radio_names:
                 try:
                     # ann['/AP']['/N'] should have two items. One of them is '/Off',
                     # the other is the active value.
-                    on_values = [v for v in ann["/AP"]["/N"] if v != "/Off"]
+                    on_values = [v for v in annotation["/AP"]["/N"] if v != "/Off"]
                 except KeyError:
                     continue
                 if len(on_values) == 1:
-                    rect = ann.get("/Rect")
+                    rect = annotation.get("/Rect")
                     if field_id not in radio_fields_by_id:
                         radio_fields_by_id[field_id] = {
                             "field_id": field_id,
@@ -123,13 +123,13 @@ def get_field_info(reader: PdfReader):
             print(f"Unable to determine location for field id: {field_info.get('field_id')}, ignoring")
 
     # Sort by page number, then Y position (flipped in PDF coordinate system), then X.
-    def sort_key(f):
-        if "radio_options" in f:
-            rect = f["radio_options"][0]["rect"] or [0, 0, 0, 0]
+    def sort_key(field_entry):
+        if "radio_options" in field_entry:
+            rect = field_entry["radio_options"][0]["rect"] or [0, 0, 0, 0]
         else:
-            rect = f.get("rect") or [0, 0, 0, 0]
+            rect = field_entry.get("rect") or [0, 0, 0, 0]
         adjusted_position = [-rect[1], rect[0]]
-        return [f.get("page"), adjusted_position]
+        return [field_entry.get("page"), adjusted_position]
     
     sorted_fields = fields_with_location + list(radio_fields_by_id.values())
     sorted_fields.sort(key=sort_key)

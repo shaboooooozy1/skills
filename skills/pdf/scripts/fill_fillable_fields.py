@@ -26,7 +26,7 @@ def fill_pdf_fields(input_pdf_path: str, fields_json_path: str, output_pdf_path:
 
     has_error = False
     field_info = get_field_info(reader)
-    fields_by_ids = {f["field_id"]: f for f in field_info}
+    fields_by_ids = {entry["field_id"]: entry for entry in field_info}
     for field in fields:
         existing_field = fields_by_ids.get(field["field_id"])
         if not existing_field:
@@ -37,9 +37,9 @@ def fill_pdf_fields(input_pdf_path: str, fields_json_path: str, output_pdf_path:
             print(f"ERROR: Incorrect page number for `{field['field_id']}` (got {field['page']}, expected {existing_field['page']})")
         else:
             if "value" in field:
-                err = validation_error_for_field_value(existing_field, field["value"])
-                if err:
-                    print(err)
+                validation_error = validation_error_for_field_value(existing_field, field["value"])
+                if validation_error:
+                    print(validation_error)
                     has_error = True
     if has_error:
         sys.exit(1)
@@ -97,7 +97,7 @@ def monkeypatch_pydpf_method():
         result = original_get_inherited(self, key, default)
         if key == FieldDictionaryAttributes.Opt:
             if isinstance(result, list) and all(isinstance(v, list) and len(v) == 2 for v in result):
-                result = [r[0] for r in result]
+                result = [option_pair[0] for option_pair in result]
         return result
 
     DictionaryObject.get_inherited = patched_get_inherited
