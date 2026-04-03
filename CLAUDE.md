@@ -8,10 +8,10 @@ This is the **Anthropic Agent Skills** repository — a collection of skills tha
 
 ```
 skills/               # Main skills directory (17 skills)
-├── docx/             # Word document creation/editing (source-available)
-├── pdf/              # PDF manipulation (source-available)
-├── pptx/             # PowerPoint creation/editing (source-available)
-├── xlsx/             # Spreadsheet creation with formulas (source-available)
+├── docx/             # Word document creation/editing
+├── pdf/              # PDF manipulation
+├── pptx/             # PowerPoint creation/editing
+├── xlsx/             # Spreadsheet creation with formulas
 ├── algorithmic-art/  # Generative art creation
 ├── brand-guidelines/ # Brand guideline enforcement
 ├── canvas-design/    # Canvas-based design
@@ -37,11 +37,11 @@ Every skill follows a consistent structure:
 **Required file:**
 - `SKILL.md` — YAML frontmatter (`name`, `description`) + markdown instructions body
 
-**Optional directories:**
+**Optional:**
 - `scripts/` — Executable Python/Bash scripts (called as black boxes, never read into context)
 - `references/` — Documentation loaded into context as needed
 - `assets/` — Templates, icons, fonts, boilerplate code
-- `LICENSE.txt` — Apache 2.0 (examples) or Proprietary (document skills)
+- `LICENSE.txt` — License file
 
 ## Key Conventions
 
@@ -51,7 +51,6 @@ Every skill follows a consistent structure:
 - **Imperative language** — always use infinitive/imperative form in instructions
 - **Description field is the trigger** — must clearly state what the skill does AND when to use it
 - **No extraneous files** — no README.md, CHANGELOG.md, etc. inside skills
-- **Black box scripts** — run scripts with `--help` first; do not read script source into context
 
 ### Degrees of Freedom
 
@@ -77,13 +76,7 @@ Use the `skill-creator` skill's tools:
 4. `python skills/skill-creator/scripts/package_skill.py <path/to/skill-folder>` — package as `.skill` file (validated zip)
 5. `python skills/skill-creator/scripts/quick_validate.py <path>` — validate structure
 
-### Validation Checks
-
-The validation scripts check:
-- YAML frontmatter presence and correctness
-- Required fields (`name`, `description`)
-- Naming conventions
-- Directory structure compliance
+There is no traditional build system. Skills are static folders packaged as `.skill` files. Testing is done by running skills against real tasks and iterating.
 
 ## External Dependencies
 
@@ -93,20 +86,16 @@ Some skills require:
 - **Playwright** (webapp-testing)
 - **LibreOffice** (xlsx formula recalculation)
 
-## Build & Test
-
-There is no traditional build system. Skills are static folders packaged as `.skill` files (zip archives). Testing is done by running skills against real tasks and iterating.
-
 ## Licensing
 
 - **Apache 2.0**: Example skills and specification
-- **Proprietary/Source-Available**: Document skills (docx, pdf, pptx, xlsx)
+- **Source-Available**: Document skills (docx, pdf, pptx, xlsx)
 
 ## Plugin Marketplace
 
 Defined in `.claude-plugin/marketplace.json` with two groups:
 - **document-skills**: xlsx, docx, pptx, pdf
-- **example-skills**: all other skills
+- **example-skills**: most other skills (see `marketplace.json` for exact list)
 
 Skills are installed via `/plugin marketplace add` (Claude Code) or uploaded directly (Claude.ai / API).
 
