@@ -1,4 +1,4 @@
-> **Note:** This repository contains Anthropic's implementation of skills for Claude. For information about the Agent Skills standard, see [agentskills.io](http://agentskills.io).
+> **Note:** This repository contains Anthropic's implementation of skills for Claude. For information about the Agent Skills standard, see [agentskills.io](https://agentskills.io).
 
 # Skills
 Skills are folders of instructions, scripts, and resources that Claude loads dynamically to improve performance on specialized tasks. Skills teach Claude how to complete specific tasks in a repeatable way, whether that's creating documents with your company's brand guidelines, analyzing data using your organization's specific workflows, or automating personal tasks.
@@ -70,7 +70,7 @@ description: A clear description of what this skill does and when to use it
 
 # My Skill Name
 
-[Add your instructions here that Claude will follow when this skill is active]
+[Add your instructions here that the assistant will follow when this skill is active]
 
 ## Examples
 - Example usage 1
@@ -85,7 +85,7 @@ The frontmatter requires only two fields:
 - `name` - A unique identifier for your skill (lowercase, hyphens for spaces)
 - `description` - A complete description of what the skill does and when to use it
 
-The markdown content below contains the instructions, examples, and guidelines that Claude will follow. For more details, see [How to create custom skills](https://support.claude.com/en/articles/12512198-creating-custom-skills).
+The markdown content below contains the instructions, examples, and guidelines that the assistant will follow. For more details, see [How to create custom skills](https://support.claude.com/en/articles/12512198-creating-custom-skills).
 
 # Partner Skills
 
