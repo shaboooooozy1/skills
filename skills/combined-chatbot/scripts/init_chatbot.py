@@ -2,11 +2,17 @@
 """Initialize a new chatbot project with recommended structure."""
 
 import argparse
-import os
 from pathlib import Path
 
 PLATFORMS = ["slack", "discord", "telegram", "web"]
 LANGUAGES = ["python", "typescript"]
+
+TYPESCRIPT_DEPS = {
+    "slack": '"@slack/bolt": "^3.17.0"',
+    "discord": '"discord.js": "^14.14.0"',
+    "telegram": '"telegraf": "^4.15.0"',
+    "web": '"express": "^4.18.0"',
+}
 
 
 def create_python_project(project_path: Path, platform: str) -> None:
@@ -381,14 +387,6 @@ def create_typescript_project(project_path: Path, platform: str) -> None:
     for dir_path in dirs:
         (project_path / dir_path).mkdir(parents=True, exist_ok=True)
 
-    # Package.json
-    deps = {
-        "slack": '"@slack/bolt": "^3.17.0"',
-        "discord": '"discord.js": "^14.14.0"',
-        "telegram": '"telegraf": "^4.15.0"',
-        "web": '"express": "^4.18.0"',
-    }
-
     (project_path / "package.json").write_text(
         f'''{{
   "name": "{project_path.name}",
@@ -401,7 +399,7 @@ def create_typescript_project(project_path: Path, platform: str) -> None:
     "test": "jest"
   }},
   "dependencies": {{
-    {deps.get(platform, deps["web"])}
+    {TYPESCRIPT_DEPS.get(platform, TYPESCRIPT_DEPS["web"])}
   }},
   "devDependencies": {{
     "@types/node": "^20.0.0",
