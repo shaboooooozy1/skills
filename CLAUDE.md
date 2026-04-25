@@ -99,6 +99,98 @@ Defined in `.claude-plugin/marketplace.json` with two groups:
 
 Skills are installed via `/plugin marketplace add` (Claude Code) or uploaded directly (Claude.ai / API).
 
+## Using Skills via the Anthropic API
+
+### Beta API Namespaces
+
+All Skills functionality requires the `client.beta.*` namespace. Never use the standard `client.messages.create()` for skill-enabled calls.
+
+```python
+# ❌ Wrong
+response = client.messages.create(container={...})
+
+# ✅ Correct
+response = client.beta.messages.create(
+    betas=["code-execution-2025-08-25", "files-api-2025-04-14", "skills-2025-10-02"],
+    container={"skills": [{"type": "anthropic", "skill_id": "xlsx", "version": "latest"}]},
+    tools=[{"type": "code_execution_20250825", "name": "code_execution"}],
+    model="claude-sonnet-4-6",
+    max_tokens=4096,
+    messages=[{"role": "user", "content": "..."}],
+)
+```
+
+Pass beta headers **per-request** via the `betas` parameter — do not set them in `default_headers`, which would require code execution on every call:
+
+```python
+# ❌ Wrong (applies to all requests)
+client = Anthropic(default_headers={"anthropic-beta": "skills-2025-10-02"})
+
+# ✅ Correct (scoped to skill requests only)
+response = client.beta.messages.create(
+    betas=["code-execution-2025-08-25", "files-api-2025-04-14", "skills-2025-10-02"],
+    ...
+)
+```
+
+Files must also be accessed through the beta namespace:
+
+```python
+# ❌ Wrong
+content = client.files.content(file_id)
+
+# ✅ Correct
+content = client.beta.files.download(file_id)
+metadata = client.beta.files.retrieve_metadata(file_id)
+```
+
+### File ID Extraction
+
+Skills generate output files and return `file_id` values embedded in the response. The response structure differs from the standard Messages API — file IDs are nested inside `bash_code_execution_tool_result` blocks:
+
+```python
+# Manual extraction
+file_ids = []
+for block in response.content:
+    if block.type == "tool_result":
+        for inner in getattr(block, "content", []):
+            if hasattr(inner, "file_id"):
+                file_ids.append(inner.file_id)
+```
+
+Use `.read()` (not `.content`) to get file bytes, and `.size_bytes` (not `.size`) for file size:
+
+```python
+# ❌ Wrong
+data = client.beta.files.download(file_id).content  # AttributeError
+size = metadata.size                                  # AttributeError
+
+# ✅ Correct
+data = client.beta.files.download(file_id).read()
+metadata = client.beta.files.retrieve_metadata(file_id)
+size = metadata.size_bytes
+```
+
+### Document Generation Timing
+
+Document generation takes significantly longer than standard API calls. Always set user expectations before triggering a generation cell:
+
+| Document type | Typical time |
+|---------------|-------------|
+| Excel (`.xlsx`) | ~2 minutes |
+| PowerPoint (`.pptx`) | 1–2 minutes |
+| PDF | 1–2 minutes |
+| Word (`.docx`) | 1–2 minutes |
+
+Add a note immediately before long-running cells:
+
+```markdown
+**⏱️ Note**: Excel generation typically takes ~2 minutes.
+The cell will show `[*]` while running — this is expected.
+```
+
+Keep generated examples simple and focused; generation time scales with complexity. Notebook cells that appear frozen are almost always still running.
+
 ## Git Conventions
 
 - Feature branch workflow with PRs
