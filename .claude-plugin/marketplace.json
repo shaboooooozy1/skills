@@ -40,6 +40,15 @@
         "./skills/web-artifacts-builder",
         "./skills/webapp-testing"
       ]
+    },
+    {
+      "name": "apollo",
+      "description": "Sales prospecting skills backed by Apollo data tools",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/apollo-enrich-lead"
+      ]
     }
   ]
 }
