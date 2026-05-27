@@ -1,6 +1,7 @@
 ---
 name: claude-setup-architect
-description: Use this skill when the user wants to turn a task, workflow, recurring process, or messy idea into the right Claude setup: a one-off prompt, a Claude Project, or a reusable Skill. Also use it to create project instructions, voice files, anti-AI writing rules, output templates, success criteria, artifact specs, and execution-ready prompts.
+description: >
+  Use this skill when the user wants to turn a task, workflow, recurring process, or messy idea into the right Claude setup: a one-off prompt, a Claude Project, or a reusable Skill. Also use it to create project instructions, voice files, anti-AI writing rules, output templates, success criteria, artifact specs, and execution-ready prompts.
 ---
 # Claude Setup Architect
 ## Purpose
