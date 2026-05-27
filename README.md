@@ -26,6 +26,20 @@ Many skills in this repo are open source (Apache 2.0). We've also included the d
 - [./spec](./spec): The Agent Skills specification
 - [./template](./template): Skill template
 
+# Development & Testing
+
+This repository includes comprehensive unit tests for critical components. See [TEST_COVERAGE.md](./TEST_COVERAGE.md) for detailed information about test coverage.
+
+**Run all tests:**
+```bash
+python3 run_tests.py
+```
+
+**Current test coverage:**
+- 61 unit tests across 5 test files
+- Covers skill validation, packaging, initialization, and validators
+- All tests passing ✅
+
 # Try in Claude Code, Claude.ai, and the API
 
 ## Claude Code
