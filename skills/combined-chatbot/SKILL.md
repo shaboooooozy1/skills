@@ -107,7 +107,15 @@ class ConversationContext:
         return [s for s in required_slots if s not in self.slots]
 ```
 
-#### 3.3 Platform Integration
+#### 3.3 Conversation Identity
+
+Use two stable identifiers for every stateful request:
+- `session_id`: the conversation scope, such as a channel, chat, thread, or browser session
+- `user_id`: the participant within that scope
+
+Key context by the `(session_id, user_id)` pair. Never use a shared channel or chat ID as the complete key, and do not collapse all unauthenticated clients into one `anonymous` identity in production.
+
+#### 3.4 Platform Integration
 
 See [Platform Integration Guide](./references/platform-integrations.md) for platform-specific setup:
 - Slack: Bolt SDK, slash commands, interactive components
@@ -139,6 +147,8 @@ Test these scenarios:
 - Invalid inputs and graceful recovery
 - Session timeout handling
 - Concurrent conversations
+- Two users in one shared channel remain isolated
+- One user in two sessions remains isolated
 
 See [Testing Patterns](./references/testing-patterns.md) for comprehensive test strategies.
 

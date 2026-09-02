@@ -31,8 +31,8 @@ def create_python_project(project_path: Path, platform: str) -> None:
         f'''"""Main entry point for the chatbot."""
 
 import os
-from chatbot import ChatBot
-from platforms.{platform} import {platform.title()}Adapter
+from .chatbot import ChatBot
+from .platforms.{platform} import {platform.title()}Adapter
 
 
 def main():
@@ -90,15 +90,19 @@ class ConversationContext:
 
 class ChatBot:
     def __init__(self):
-        self.contexts: dict[str, ConversationContext] = {}
+        # A session identifies the conversation scope (for example, a channel),
+        # while a user identifies the participant within that scope. Both are
+        # required to prevent users in a shared channel from sharing state.
+        self.contexts: dict[tuple[str, str], ConversationContext] = {}
 
     def get_context(self, session_id: str, user_id: str) -> ConversationContext:
-        if session_id not in self.contexts:
-            self.contexts[session_id] = ConversationContext(
+        key = (session_id, user_id)
+        if key not in self.contexts:
+            self.contexts[key] = ConversationContext(
                 user_id=user_id,
                 session_id=session_id
             )
-        return self.contexts[session_id]
+        return self.contexts[key]
 
     async def process(self, text: str, session_id: str, user_id: str) -> Response:
         context = self.get_context(session_id, user_id)
@@ -125,7 +129,7 @@ class ChatBot:
         '''"""Base handler interface."""
 
 from abc import ABC, abstractmethod
-from chatbot import ConversationContext, Response
+from ..chatbot import ConversationContext, Response
 
 
 class BaseHandler(ABC):
@@ -196,6 +200,20 @@ class TestBasicConversation:
         await bot.process("hello", session_id="test", user_id="user1")
         context = bot.get_context("test", "user1")
         assert len(context.history) == 1
+
+    @pytest.mark.asyncio
+    async def test_context_isolated_by_user_and_session(self, bot):
+        await bot.process("from user 1", session_id="shared", user_id="user1")
+        await bot.process("from user 2", session_id="shared", user_id="user2")
+        await bot.process("other session", session_id="other", user_id="user1")
+
+        user1_shared = bot.get_context("shared", "user1")
+        user2_shared = bot.get_context("shared", "user2")
+        user1_other = bot.get_context("other", "user1")
+
+        assert [m.text for m in user1_shared.history] == ["from user 1"]
+        assert [m.text for m in user2_shared.history] == ["from user 2"]
+        assert [m.text for m in user1_other.history] == ["other session"]
 '''
     )
 
@@ -208,7 +226,7 @@ def get_platform_adapter(platform: str) -> str:
 import os
 from slack_bolt.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
-from chatbot import ChatBot
+from ..chatbot import ChatBot
 
 
 class SlackAdapter:
@@ -247,7 +265,7 @@ class SlackAdapter:
 import os
 import discord
 from discord import app_commands
-from chatbot import ChatBot
+from ..chatbot import ChatBot
 
 
 class DiscordAdapter(discord.Client):
@@ -282,7 +300,7 @@ class DiscordAdapter(discord.Client):
 import os
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
-from chatbot import ChatBot
+from ..chatbot import ChatBot
 
 
 class TelegramAdapter:
@@ -315,7 +333,7 @@ import os
 import uuid
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from chatbot import ChatBot
+from ..chatbot import ChatBot
 
 
 class MessageRequest(BaseModel):
@@ -458,18 +476,28 @@ export interface ConversationContext {
 }
 
 export class ChatBot {
-  private contexts: Map<string, ConversationContext> = new Map();
+  // Keep a separate context for every participant in each conversation scope.
+  // A nested map avoids ambiguous string-concatenated composite keys.
+  private contexts: Map<string, Map<string, ConversationContext>> = new Map();
 
   getContext(sessionId: string, userId: string): ConversationContext {
-    if (!this.contexts.has(sessionId)) {
-      this.contexts.set(sessionId, {
+    let sessionContexts = this.contexts.get(sessionId);
+    if (!sessionContexts) {
+      sessionContexts = new Map();
+      this.contexts.set(sessionId, sessionContexts);
+    }
+
+    let context = sessionContexts.get(userId);
+    if (!context) {
+      context = {
         userId,
         sessionId,
         history: [],
         slots: {},
-      });
+      };
+      sessionContexts.set(userId, context);
     }
-    return this.contexts.get(sessionId)!;
+    return context;
   }
 
   async process(text: string, sessionId: string, userId: string): Promise<Response> {
