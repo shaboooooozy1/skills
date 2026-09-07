@@ -13,27 +13,39 @@
 
 **Python:**
 ```python
-from slack_bolt import App
-from slack_bolt.adapter.socket_mode import SocketModeHandler
+import asyncio
+import os
 
-app = App(token=os.environ["SLACK_BOT_TOKEN"])
+from slack_bolt.async_app import AsyncApp
+from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
+
+app = AsyncApp(token=os.environ["SLACK_BOT_TOKEN"])
 
 @app.event("app_mention")
 async def handle_mention(event, say):
-    user_id = event["user"]
-    text = event["text"]
-    response = await chatbot.process(text, user_id=user_id)
+    response = await chatbot.process(
+        event["text"],
+        session_id=event["channel"],
+        user_id=event["user"],
+    )
     await say(response.text, blocks=response.blocks)
 
 @app.event("message")
 async def handle_dm(event, say):
     if event.get("channel_type") == "im":
-        response = await chatbot.process(event["text"], user_id=event["user"])
+        response = await chatbot.process(
+            event["text"],
+            session_id=event["channel"],
+            user_id=event["user"],
+        )
         await say(response.text)
 
-# Start with Socket Mode for development
-handler = SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
-handler.start()
+async def main():
+    handler = AsyncSocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
+    await handler.start_async()
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 **Node.js:**
@@ -59,7 +71,11 @@ app.start(3000);
 @app.command("/ask")
 async def handle_ask(ack, command, respond):
     await ack()  # Acknowledge within 3 seconds
-    response = await chatbot.process(command["text"], user_id=command["user_id"])
+    response = await chatbot.process(
+        command["text"],
+        session_id=command["channel_id"],
+        user_id=command["user_id"],
+    )
     await respond(response.text)
 ```
 
@@ -70,7 +86,8 @@ async def handle_ask(ack, command, respond):
 async def handle_confirm(ack, body, respond):
     await ack()
     user_id = body["user"]["id"]
-    context = get_context(user_id)
+    session_id = body["channel"]["id"]
+    context = get_context(session_id, user_id)
     result = await complete_booking(context)
     await respond(f"Booking confirmed: {result.confirmation_id}")
 
@@ -109,7 +126,11 @@ class ChatBot(discord.Client):
 
         # Respond to DMs or mentions
         if isinstance(message.channel, discord.DMChannel) or self.user in message.mentions:
-            response = await chatbot.process(message.content, user_id=str(message.author.id))
+            response = await chatbot.process(
+                message.content,
+                session_id=str(message.channel.id),
+                user_id=str(message.author.id),
+            )
             await message.channel.send(response.text)
 
 client = ChatBot()
@@ -117,7 +138,11 @@ client = ChatBot()
 @client.tree.command(name="ask", description="Ask the chatbot a question")
 async def ask(interaction: discord.Interaction, question: str):
     await interaction.response.defer()
-    response = await chatbot.process(question, user_id=str(interaction.user.id))
+    response = await chatbot.process(
+        question,
+        session_id=str(interaction.channel_id),
+        user_id=str(interaction.user.id),
+    )
     await interaction.followup.send(response.text)
 
 client.run(os.environ["DISCORD_TOKEN"])
@@ -158,7 +183,11 @@ async def start(update: Update, context):
 
 async def handle_message(update: Update, context):
     user_id = str(update.effective_user.id)
-    response = await chatbot.process(update.message.text, user_id=user_id)
+    response = await chatbot.process(
+        update.message.text,
+        session_id=str(update.effective_chat.id),
+        user_id=user_id,
+    )
 
     if response.buttons:
         keyboard = [[InlineKeyboardButton(b.text, callback_data=b.action)] for b in response.buttons]
@@ -170,7 +199,11 @@ async def handle_message(update: Update, context):
 async def handle_callback(update: Update, context):
     query = update.callback_query
     await query.answer()
-    response = await chatbot.process_action(query.data, user_id=str(query.from_user.id))
+    response = await chatbot.process_action(
+        query.data,
+        session_id=str(update.effective_chat.id),
+        user_id=str(query.from_user.id),
+    )
     await query.edit_message_text(response.text)
 
 app = Application.builder().token(os.environ["TELEGRAM_TOKEN"]).build()
@@ -280,6 +313,12 @@ function useChat(sessionId) {
 
 ## Common Patterns
 
+### Conversation Identity
+
+Treat `session_id` as the conversation scope (such as a channel, chat, thread, or browser session) and `user_id` as the participant within that scope. Key stored context by both values. A channel or chat ID alone is shared by multiple people and must never be used as the complete context key.
+
+Require stable, authenticated user IDs in production. If anonymous access is intentional, issue a per-client identifier instead of assigning every client the same `anonymous` user ID.
+
 ### Platform Adapter Interface
 
 Create a unified interface for multi-platform support:
@@ -316,12 +355,34 @@ class DiscordAdapter(PlatformAdapter):
 Always verify webhook signatures:
 
 ```python
-import hmac
 import hashlib
+import hmac
+import time
 
-def verify_slack_signature(request_body: bytes, timestamp: str, signature: str, secret: str) -> bool:
-    base = f"v0:{timestamp}:{request_body.decode()}"
-    computed = "v0=" + hmac.new(secret.encode(), base.encode(), hashlib.sha256).hexdigest()
+def verify_slack_signature(
+    request_body: bytes,
+    timestamp: str | None,
+    signature: str | None,
+    secret: str,
+    max_age_seconds: int = 300,
+) -> bool:
+    if not timestamp or not signature:
+        return False
+
+    try:
+        request_time = int(timestamp)
+    except ValueError:
+        return False
+
+    if abs(time.time() - request_time) > max_age_seconds:
+        return False
+
+    base = b"v0:" + timestamp.encode("utf-8") + b":" + request_body
+    computed = "v0=" + hmac.new(
+        secret.encode("utf-8"),
+        base,
+        hashlib.sha256,
+    ).hexdigest()
     return hmac.compare_digest(computed, signature)
 
 @app.post("/slack/events")
