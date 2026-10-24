@@ -307,7 +307,9 @@ def main():
     # with no claims in the selected lines still counts as a zero-retained year.
     if a.years:
         try:
-            lo, _, hi = a.years.partition("-")
+            lo, dash, hi = a.years.partition("-")
+            if dash and not hi.strip():
+                raise ValueError  # "2021-" has no end year; never read it as 2021 alone
             lo_y, hi_y = int(lo), int(hi or lo)
         except ValueError:
             sys.exit("--years must look like 2021-2025 or 2024")

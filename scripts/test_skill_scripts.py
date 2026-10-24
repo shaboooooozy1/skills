@@ -682,6 +682,25 @@ with tempfile.TemporaryDirectory() as tmp:
     check(json.loads((tp / "norec.json").read_text())["totals"].get("recoveries_note"),
           "missing recoveries column not mentioned")
 
+    # Codex round on f258488.
+    (tp / "vbl.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\nT,2024,GL,V1,2024-06-01,closed,100,0,2024-05-01\n")
+    run([LR, "vbl.csv", "--as-of", "2026-10-24", "--out", "vbl"], tmp)
+    check(json.loads((tp / "vbl.json").read_text())["flag_counts"].get("valuation_before_loss") == 1,
+          "valuation dated before the loss not flagged")
+    check(fails([RET, "mm.csv", "--retentions", "1000", "--years", "2021-"], "--years"), "--years 2021- read as one year")
+    for eb in (None, [1]):
+        (tp / "tc_eb.json").write_text(json.dumps({"exposure_base": eb, "periods": [{"label": "P", "premiums": 1000}]}))
+        if eb is None:
+            run([TCOR, "tc_eb.json", "--out", "tc_eb_out"], tmp)
+            check((tp / "tc_eb_out.json").exists(), "exposure_base null crashed TCOR")
+        else:
+            check(fails([TCOR, "tc_eb.json"], "exposure_base must be an object"), "exposure_base list crashed TCOR")
+    for bad in ("+-100", "--100", "+$-100"):
+        (tp / "sgn.csv").write_text(f"Year,Value\n2024,{bad}\n")
+        check(fails([CHART, "sgn.csv", "--title", "x"], "Non-numeric"), f"chart value {bad} crashed")
+        (tp / "tc_sgn.json").write_text(json.dumps({"periods": [{"label": "P", "premiums": bad}]}))
+        check(fails([TCOR, "tc_sgn.json"], "Not a number"), f"TCOR value {bad} crashed")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"

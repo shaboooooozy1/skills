@@ -287,6 +287,10 @@ def check_rows(df, flags):
             flag(flags, r, "open_zero_reserve", "Open claim carries no reserve. Ask the carrier.")
         if r["status"] == "closed" and pd.notna(r["outstanding"]) and r["outstanding"] > 0:
             flag(flags, r, "closed_with_reserve", f"Closed claim still shows {r['outstanding']:,.0f} outstanding.")
+        if pd.notna(r["loss_date"]) and pd.notna(r["valuation_date"]) and r["valuation_date"] < r["loss_date"]:
+            flag(flags, r, "valuation_before_loss",
+                 f"Valued {r['valuation_date'].date()}, before the loss on {r['loss_date'].date()}. One of the dates "
+                 "is wrong. Confirm with the carrier report.")
         if pd.notna(r["loss_date"]):
             if pd.notna(r["policy_effective"]):
                 start = r["policy_effective"]

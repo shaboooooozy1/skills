@@ -29,7 +29,7 @@ LABELS = {
 }
 
 
-MONEY_RE = re.compile(r"[+-]?\$?[+-]?(\d{1,3}(,\d{3})+|\d+)?(\.\d+)?")
+MONEY_RE = re.compile(r"([+-]?\$?|\$[+-])(\d{1,3}(,\d{3})+|\d+)?(\.\d+)?")  # one sign, before or after $
 
 
 def parse_money(s):
@@ -42,7 +42,10 @@ def parse_money(s):
         return None
     if neg and ("-" in s or "+" in s):
         return None  # "(-$1,000)" mixes two negative notations; never let them cancel out
-    n = float(s.replace("$", "").replace(",", ""))
+    try:
+        n = float(s.replace("$", "").replace(",", ""))
+    except ValueError:
+        return None
     return -n if neg else n
 
 
@@ -171,7 +174,11 @@ def main():
     periods = cfg.get("periods") if isinstance(cfg, dict) else None
     if not isinstance(periods, list) or not periods or not all(isinstance(p, dict) for p in periods):
         sys.exit("inputs.json needs a 'periods' list of objects, e.g. {\"periods\": [{\"label\": \"2025\", ...}]}.")
-    base = cfg.get("exposure_base", {})
+    base = cfg.get("exposure_base")
+    if base is None:
+        base = {}  # null = same defaults as leaving it out
+    if not isinstance(base, dict):
+        sys.exit("exposure_base must be an object like {\"name\": \"payroll\", \"per\": 100}.")
     base_name = base.get("name", "exposure")
     per = num(base.get("per", 1000), "exposure_base.per")
     if per <= 0:

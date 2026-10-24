@@ -39,7 +39,7 @@ def fmt_value(v, kind):
     return f"{v:,.0f}" if abs(v) >= 100 else f"{v:,.2f}".rstrip("0").rstrip(".")
 
 
-MONEY_RE = re.compile(r"[+-]?\$?[+-]?(\d{1,3}(,\d{3})+|\d+)?(\.\d+)?")
+MONEY_RE = re.compile(r"([+-]?\$?|\$[+-])(\d{1,3}(,\d{3})+|\d+)?(\.\d+)?")  # one sign, before or after $
 
 
 def parse_money(s):
@@ -52,7 +52,10 @@ def parse_money(s):
         return None
     if neg and ("-" in s or "+" in s):
         return None  # "(-$1,000)" mixes two negative notations; never let them cancel out
-    n = float(s.replace("$", "").replace(",", ""))
+    try:
+        n = float(s.replace("$", "").replace(",", ""))
+    except ValueError:
+        return None
     return -n if neg else n
 
 
