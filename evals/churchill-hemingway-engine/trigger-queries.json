@@ -1,0 +1,58 @@
+[
+  {
+    "query": "Draft a renewal reminder to the CFO at a tool-and-die shop, policy renews in 60 days",
+    "should_trigger": true
+  },
+  {
+    "query": "Can you tighten this email? It feels too long: Hi Tom, I hope you're doing well...",
+    "should_trigger": true
+  },
+  {
+    "query": "Write a LinkedIn note to a trucking company owner about cargo coverage",
+    "should_trigger": true
+  },
+  {
+    "query": "Make this sound like me before I send it",
+    "should_trigger": true
+  },
+  {
+    "query": "Give me three subject lines for a BOR letter",
+    "should_trigger": true
+  },
+  {
+    "query": "Rewrite this follow-up, it's too soft",
+    "should_trigger": true
+  },
+  {
+    "query": "Thank-you note to the folks who came to last night's dinner at the Erie Club",
+    "should_trigger": true
+  },
+  {
+    "query": "Draft a cold intro to a manufacturer about cyber exposure",
+    "should_trigger": true
+  },
+  {
+    "query": "Summarize these loss runs by policy year",
+    "should_trigger": false
+  },
+  {
+    "query": "What's an XLOOKUP that pulls the premium from sheet 2?",
+    "should_trigger": false
+  },
+  {
+    "query": "Build me a TCOR worksheet for this client",
+    "should_trigger": false
+  },
+  {
+    "query": "Triage my inbox and pull out action items from the last 40 emails",
+    "should_trigger": false
+  },
+  {
+    "query": "Chart premium history for 2021-2025",
+    "should_trigger": false
+  },
+  {
+    "query": "Explain what a waiver of subrogation is",
+    "should_trigger": false
+  }
+]

@@ -1,0 +1,38 @@
+[
+  {
+    "query": "Prototype a COI tracker with expiry status chips",
+    "should_trigger": true
+  },
+  {
+    "query": "Show me what a client renewal comparison screen could look like",
+    "should_trigger": true
+  },
+  {
+    "query": "Build a quick app where I enter premium and losses and it shows TCOR",
+    "should_trigger": true
+  },
+  {
+    "query": "Mock up a landing page for my cyber liability seminar",
+    "should_trigger": true
+  },
+  {
+    "query": "I want to test an idea for a claims intake form",
+    "should_trigger": true
+  },
+  {
+    "query": "Fix the bug in my production React app",
+    "should_trigger": false
+  },
+  {
+    "query": "Make a bar chart of these numbers",
+    "should_trigger": false
+  },
+  {
+    "query": "Write the TCOR analysis for this client",
+    "should_trigger": false
+  },
+  {
+    "query": "Make me a slide deck",
+    "should_trigger": false
+  }
+]

@@ -1,0 +1,46 @@
+[
+  {
+    "query": "Here are five years of loss runs from two carriers, what's the story?",
+    "should_trigger": true
+  },
+  {
+    "query": "Attached is the currently valued auto loss run, total it by year",
+    "should_trigger": true
+  },
+  {
+    "query": "How do this client's claims look heading into renewal?",
+    "should_trigger": true
+  },
+  {
+    "query": "Which claims are driving the incurred numbers?",
+    "should_trigger": true
+  },
+  {
+    "query": "Loss ratio by line for 2021-2025 from these reports",
+    "should_trigger": true
+  },
+  {
+    "query": "Flag anything weird in these WC loss runs before I send them to market",
+    "should_trigger": true
+  },
+  {
+    "query": "Write a renewal email to the client",
+    "should_trigger": false
+  },
+  {
+    "query": "What's our TCOR if we go to a $100K deductible?",
+    "should_trigger": false
+  },
+  {
+    "query": "Review this medical stop-loss renewal",
+    "should_trigger": false
+  },
+  {
+    "query": "Make a bar chart of these four numbers",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the difference between occurrence and claims-made?",
+    "should_trigger": false
+  }
+]

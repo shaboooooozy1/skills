@@ -1,0 +1,17 @@
+{
+  "name": "broker-voice",
+  "version": "1.1.0",
+  "description": "Churchill-Hemingway writing engine for commercial insurance broker communications: draft and edit modes, templates, compliance guardrails.",
+  "author": {
+    "name": "Will Bloomstine",
+    "url": "https://github.com/shaboooooozy1"
+  },
+  "homepage": "https://github.com/shaboooooozy1/skills",
+  "license": "MIT",
+  "keywords": [
+    "writing",
+    "email",
+    "insurance",
+    "voice"
+  ]
+}

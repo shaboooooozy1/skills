@@ -1,0 +1,27 @@
+{
+  "client": "Synthetic Manufacturing Co (test data)",
+  "exposure_base": {"name": "revenue", "per": 1000},
+  "periods": [
+    {
+      "label": "2025-26 Guaranteed cost (current)",
+      "kind": "actual",
+      "exposure": 48000000,
+      "premiums": {"WC": 146000, "GL": 51000, "AL": 251000, "Umbrella": 38000, "Taxes and fees": 4200},
+      "retained_losses": {"Uninsured losses": 6000},
+      "admin": {"Internal safety coordinator (25%)": 21000},
+      "risk_control": {"Telematics": 14000},
+      "source": "Synthetic test figures"
+    },
+    {
+      "label": "2026-27 AL $100K deductible (scenario)",
+      "kind": "scenario",
+      "exposure": 50000000,
+      "premiums": {"WC": 146000, "GL": 51000, "AL": 176000, "Umbrella": 38000, "Taxes and fees": 3900},
+      "retained_losses": {"Uninsured losses": 6000, "AL deductible losses (replay)": 64900},
+      "admin": {"Internal safety coordinator (25%)": 21000, "Deductible claims handling": 9000},
+      "risk_control": {"Telematics": 14000},
+      "collateral": {"amount": 150000, "cost_rate": 0.015, "fees": 1000},
+      "source": "Synthetic test figures; AL premium is a made-up indication for testing"
+    }
+  ]
+}

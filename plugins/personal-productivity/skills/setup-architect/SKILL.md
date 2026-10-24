@@ -1,8 +1,17 @@
 ---
-name: claude-setup-architect
-description: Use this skill when the user wants to turn a task, workflow, recurring process, or messy idea into the right Claude setup: a one-off prompt, a Claude Project, or a reusable Skill. Also use it to create project instructions, voice files, anti-AI writing rules, output templates, success criteria, artifact specs, and execution-ready prompts.
+name: setup-architect
+description: >-
+  Decides whether a task should become a one-off prompt, a Project, or a reusable Skill, then builds
+  the exact asset: prompt text, Project instruction files, or a complete SKILL.md. Use when the user
+  says "turn this into a skill," "make this reusable," "set this up," "I keep doing this," "create
+  project instructions," or "build my voice file," or pastes a messy workflow to systematize. For
+  testing or benchmarking an existing skill, prefer skill-creator.
+license: MIT
+metadata:
+  version: 1.1.0
+  author: Will Bloomstine
 ---
-# Claude Setup Architect
+# Setup Architect
 ## Purpose
 You help the user build an efficient Claude operating system.
 Your job is to convert any task or workflow into the right setup:
@@ -101,8 +110,9 @@ Source material: [SOURCE MATERIAL]
 Must include: [REQUIREMENTS]  
 Must avoid: [THINGS TO AVOID]
 Use my context when available. Do not write a generic answer. Give me the finished output first.
+```
 
-Project output format
+## Project output format
 
 When the best answer is a Project, create these files:
 
@@ -116,6 +126,7 @@ When the best answer is a Project, create these files:
 
 Then produce this project instruction template:
 
+````markdown
 # Project Instructions
 ## Project goal
 [Describe the goal of the project.]
@@ -143,8 +154,9 @@ Every output should be:
 - Free of generic AI phrasing
 - Formatted for immediate use
 - Checked against the success criteria before final delivery
+````
 
-Skill output format
+## Skill output format
 
 When the best answer is a Skill, create a complete SKILL.md with:
 
@@ -163,6 +175,7 @@ When the best answer is a Skill, create a complete SKILL.md with:
 
 Use this structure:
 
+````markdown
 ---
 name: [skill-name]
 description: [clear description of when this skill should activate and what it does]
@@ -215,8 +228,9 @@ When the output is too generic, revise with more concrete detail.
 - “Use this Skill to turn my workflow into a reusable process.”
 - “Create a Skill from these repeated instructions.”
 - “Build a Skill for this weekly task.”
+````
 
-Voice and style rules
+## Voice and style rules
 
 Use direct, practical language.
 
@@ -239,7 +253,7 @@ Prefer:
 * Short explanations
 * Finished outputs
 
-AskUserQuestion behavior
+## AskUserQuestion behavior
 
 When clarification is needed, use multiple choice.
 
@@ -253,7 +267,7 @@ D. All three
 
 Do not ask more than five questions before producing a useful first version.
 
-Quality checklist before final response
+## Quality checklist before final response
 
 Before finalizing any response, check:
 
@@ -265,10 +279,12 @@ Before finalizing any response, check:
 * Did I make the output reusable?
 * Did I make the next step obvious?
 
-Default command template
+
+## Default command template
 
 When the user wants immediate execution, give them this:
 
+```text
 Set this up as the right Claude system.
 Workflow/task: [DESCRIBE TASK]
 Frequency: [ONCE / OCCASIONALLY / WEEKLY / CONSTANTLY]
@@ -278,14 +294,8 @@ Audience: [WHO IT IS FOR]
 Tone/style: [VOICE REQUIREMENTS]
 Success criteria: [WHAT GOOD LOOKS LIKE]
 Decide whether this should be a Prompt, Project, Skill, or combined setup. Then create the exact asset I should use.
-After saving the Skill, run it with this:
-```text
-Set this up as the right Claude system.
-Workflow/task: [describe the workflow]
-Frequency: [once / occasionally / weekly / constantly]
-Files or context needed: [describe files, examples, docs, voice samples, or notes]
-Desired output: [what Claude should produce]
-Audience: [who it is for]
-Tone/style: [your style requirements]
-Success criteria: [what good looks like]
-Decide whether this should be a Prompt, Project, Skill, or combined setup. Then create the exact asset I should use.
+```
+
+## Skill naming rules
+
+When producing a SKILL.md, enforce: kebab-case name of 64 characters or fewer that does not contain "claude" or "anthropic"; a third-person description under 1,024 characters that says what the skill does and when to use it; a body under 500 lines with detail moved to `references/`.

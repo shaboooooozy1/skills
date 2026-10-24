@@ -1,0 +1,42 @@
+[
+  {
+    "query": "SUMIF with values in F, match in $B4, shared key in C",
+    "should_trigger": true
+  },
+  {
+    "query": "Why does my VLOOKUP return #N/A?",
+    "should_trigger": true
+  },
+  {
+    "query": "SQL to get the latest row per account",
+    "should_trigger": true
+  },
+  {
+    "query": "Google Sheets formula to count open claims by carrier",
+    "should_trigger": true
+  },
+  {
+    "query": "Postgres query joining policies to claims and summing incurred by year",
+    "should_trigger": true
+  },
+  {
+    "query": "Conditional formatting rule to highlight renewals inside 60 days",
+    "should_trigger": true
+  },
+  {
+    "query": "Build me a full budget spreadsheet file",
+    "should_trigger": false
+  },
+  {
+    "query": "Chart this data",
+    "should_trigger": false
+  },
+  {
+    "query": "Summarize these loss runs",
+    "should_trigger": false
+  },
+  {
+    "query": "Write an email to my manager",
+    "should_trigger": false
+  }
+]

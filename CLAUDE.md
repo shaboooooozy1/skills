@@ -2,11 +2,17 @@
 
 ## Repository Overview
 
-This is the **Anthropic Agent Skills** repository — a collection of skills that demonstrate Claude's capabilities using the [Agent Skills standard](https://agentskills.io/specification). Skills are self-contained folders with instructions, scripts, and resources that Claude loads dynamically to improve performance on specialized tasks.
+This is Will Bloomstine's skills repository: his own plugins under `plugins/`, plus a fork of the **Anthropic Agent Skills** repository — a collection of skills that demonstrate Claude's capabilities using the [Agent Skills standard](https://agentskills.io/specification). Skills are self-contained folders with instructions, scripts, and resources that Claude loads dynamically to improve performance on specialized tasks.
 
 ## Directory Structure
 
 ```
+plugins/              # Will's plugins (one marketplace entry each)
+├── broker-voice/          # churchill-hemingway-engine
+├── pc-risk-counsel/       # analyzing-loss-runs, analyzing-total-cost-of-risk
+└── personal-productivity/ # writing-formulas-and-sql, building-quick-charts, prototyping-ui-concepts, setup-architect
+evals/                # Synthetic test data and trigger-query sets, one folder per skill
+scripts/              # validate_skills.py, test_skill_scripts.py, package_zips.py
 skills/               # Main skills directory (17 skills)
 ├── docx/             # Word document creation/editing
 ├── pdf/              # PDF manipulation
@@ -93,11 +99,21 @@ Some skills require:
 
 ## Plugin Marketplace
 
-Defined in `.claude-plugin/marketplace.json` with two groups:
+Marketplace name: `bloomstine-skills`. Will's plugins use `source: ./plugins/<name>` with their own `.claude-plugin/plugin.json`. Never rename a published plugin; bump `version` instead.
+
+Upstream groups, defined in `.claude-plugin/marketplace.json`:
 - **document-skills**: xlsx, docx, pptx, pdf
 - **example-skills**: most other skills (see `marketplace.json` for exact list)
 
 Skills are installed via `/plugin marketplace add` (Claude Code) or uploaded directly (Claude.ai / API).
+
+## House Rules for plugins/
+
+- Run `python scripts/validate_skills.py` and `python scripts/test_skill_scripts.py` before every commit.
+- Descriptions are third person and include a "Use when…" clause with words the user actually types.
+- Arithmetic lives in scripts. Never hand-total claims or premiums in instructions.
+- No client data anywhere. Synthetic data only, in `evals/`.
+- Never invent rates, premiums, carrier positions, coverage terms, or producer codes. Coverage-adjacent output ends with a review gate.
 
 ## Git Conventions
 

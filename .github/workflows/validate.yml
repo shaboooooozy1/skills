@@ -1,0 +1,29 @@
+name: Validate skills
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install pyyaml pandas openpyxl matplotlib pyflakes
+      - name: Validate SKILL.md files and manifests
+        run: python scripts/validate_skills.py
+      - name: Lint bundled scripts
+        run: python -m pyflakes plugins/*/skills/*/scripts/*.py scripts/*.py
+      - name: Run script tests on synthetic data
+        run: python scripts/test_skill_scripts.py
+      - name: Build upload ZIPs
+        run: python scripts/package_zips.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skill-zips
+          path: dist/*.zip

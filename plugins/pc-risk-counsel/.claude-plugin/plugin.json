@@ -1,0 +1,17 @@
+{
+  "name": "pc-risk-counsel",
+  "version": "1.0.0",
+  "description": "Commercial P&C risk-counsel workflows: loss-run normalization and summary, Total Cost of Risk, and deductible/SIR retention replay. Deterministic scripts, review-gated output.",
+  "author": {
+    "name": "Will Bloomstine",
+    "url": "https://github.com/shaboooooozy1"
+  },
+  "homepage": "https://github.com/shaboooooozy1/skills",
+  "license": "MIT",
+  "keywords": [
+    "insurance",
+    "risk-management",
+    "tcor",
+    "loss-runs"
+  ]
+}

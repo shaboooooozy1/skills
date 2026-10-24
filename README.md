@@ -1,3 +1,51 @@
+# Will Bloomstine's Claude Skills
+
+Skills for a commercial P&C and employee benefits client executive. Each one turns a recurring piece of broker work into a repeatable, review-gated workflow. The math runs in scripts. The writing runs in one voice.
+
+## Plugins
+
+| Plugin | Skills | What it does |
+|---|---|---|
+| `broker-voice` | `churchill-hemingway-engine` | Drafts and edits client email, prospecting, invitations, renewals, BOR letters. Draft and edit modes. Compliance guardrails built in. |
+| `pc-risk-counsel` | `analyzing-loss-runs`, `analyzing-total-cost-of-risk` | Normalizes multi-carrier loss runs into one workbook with data flags. Builds TCOR per $1,000 of revenue. Replays loss history against deductible and SIR options. |
+| `personal-productivity` | `writing-formulas-and-sql`, `building-quick-charts`, `prototyping-ui-concepts`, `setup-architect` | Formulas and SQL, slide-ready chart images, clickable prototypes, and prompt/Project/Skill setup. |
+
+## Install
+
+**Claude Code**
+```
+/plugin marketplace add shaboooooozy1/skills
+/plugin install pc-risk-counsel@bloomstine-skills
+/plugin install broker-voice@bloomstine-skills
+/plugin install personal-productivity@bloomstine-skills
+```
+
+**Claude.ai** — download a skill ZIP from the latest GitHub Actions run (artifact `skill-zips`) or build them with `python scripts/package_zips.py`. Upload in Customize > Skills.
+
+**API** — upload the skill folder through the Skills API. Scripts need `pandas`, `openpyxl`, and `matplotlib`.
+
+## Ground rules for every skill here
+
+- No client data in this repo. Tests and examples use synthetic data in `evals/`.
+- Never invent rates, premiums, carrier positions, coverage terms, or producer codes.
+- Coverage-adjacent output ends with a review gate. Legal questions go to an attorney.
+
+## Develop
+
+```
+python scripts/validate_skills.py      # official validator + house rules on every skill
+python scripts/test_skill_scripts.py   # regression tests on synthetic data
+python scripts/package_zips.py         # claude.ai-ready ZIPs in dist/
+```
+
+Trigger-eval query sets live in `evals/<skill>/trigger-queries.json`, in the format skill-creator's description optimizer expects. See `CHANGELOG.md` for versions and `docs/AUDIT-2026-10.md` for the audit behind this structure.
+
+---
+
+## Upstream: Anthropic example skills
+
+This repository is a fork of [anthropics/skills](https://github.com/anthropics/skills). Everything under `skills/`, `spec/`, and `template/` comes from upstream and keeps its original license. The original README follows.
+
 > **Note:** This repository contains Anthropic's implementation of skills for Claude. For information about the Agent Skills standard, see [agentskills.io](http://agentskills.io).
 
 # Skills
@@ -36,14 +84,14 @@ You can register this repository as a Claude Code Plugin marketplace by running 
 
 Then, to install a specific set of skills:
 1. Select `Browse and install plugins`
-2. Select `anthropic-agent-skills`
+2. Select `bloomstine-skills`
 3. Select `document-skills` or `example-skills`
 4. Select `Install now`
 
 Alternatively, directly install either Plugin via:
 ```
-/plugin install document-skills@anthropic-agent-skills
-/plugin install example-skills@anthropic-agent-skills
+/plugin install document-skills@bloomstine-skills
+/plugin install example-skills@bloomstine-skills
 ```
 
 After installing the plugin, you can use the skill by just mentioning it. For instance, if you install the `document-skills` plugin from the marketplace, you can ask Claude Code to do something like: "Use the PDF skill to extract the form fields from `path/to/some-file.pdf`"

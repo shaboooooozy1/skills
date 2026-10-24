@@ -1,0 +1,38 @@
+[
+  {
+    "query": "Turn this weekly renewal-prep process into a skill",
+    "should_trigger": true
+  },
+  {
+    "query": "I keep pasting the same instructions every time, make this reusable",
+    "should_trigger": true
+  },
+  {
+    "query": "Should this be a Project or a Skill?",
+    "should_trigger": true
+  },
+  {
+    "query": "Create Project instructions and a voice file for my prospecting work",
+    "should_trigger": true
+  },
+  {
+    "query": "Set this up in Claude so it runs the same way every time",
+    "should_trigger": true
+  },
+  {
+    "query": "Run the evals on my loss-run skill and benchmark it",
+    "should_trigger": false
+  },
+  {
+    "query": "Draft an email to a prospect",
+    "should_trigger": false
+  },
+  {
+    "query": "Write a SQL query",
+    "should_trigger": false
+  },
+  {
+    "query": "What's on my calendar today?",
+    "should_trigger": false
+  }
+]

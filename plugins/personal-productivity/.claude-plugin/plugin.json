@@ -1,0 +1,17 @@
+{
+  "name": "personal-productivity",
+  "version": "1.1.0",
+  "description": "Everyday power-user skills: Excel/Sheets formulas and SQL, presentation-ready charts, UI prototypes, and prompt/Project/Skill setup design.",
+  "author": {
+    "name": "Will Bloomstine",
+    "url": "https://github.com/shaboooooozy1"
+  },
+  "homepage": "https://github.com/shaboooooozy1/skills",
+  "license": "MIT",
+  "keywords": [
+    "excel",
+    "sql",
+    "charts",
+    "prototyping"
+  ]
+}
