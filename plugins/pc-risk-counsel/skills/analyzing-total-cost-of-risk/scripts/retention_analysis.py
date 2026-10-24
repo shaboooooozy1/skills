@@ -61,11 +61,12 @@ def load(path, basis, notes):
     # latest valuation per claim, one row per claim
     df = (df.sort_values("valuation_date")
             .drop_duplicates(subset=["carrier", "claim_number"], keep="last"))
-    has_split = df[SPLIT].notna().any(axis=1)
     rec = df["recoveries"].fillna(0)
     if basis == "loss_only":
+        has_split = df[["paid_loss", "outstanding_loss"]].notna().all(axis=1)
         amt = df["paid_loss"].fillna(0) + df["outstanding_loss"].fillna(0) - rec
     else:
+        has_split = df[SPLIT].notna().all(axis=1)
         amt = df[SPLIT].fillna(0).sum(axis=1) - rec
     n_fallback = int((~has_split).sum())
     if n_fallback:

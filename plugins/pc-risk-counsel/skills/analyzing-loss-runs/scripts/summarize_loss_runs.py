@@ -100,7 +100,7 @@ def dedupe(df, flags):
 
 
 def compute_amounts(df, flags):
-    has_split = df[SPLIT].notna().any(axis=1)
+    has_split = df[SPLIT].notna().all(axis=1)
     rec = df["recoveries"].fillna(0)
     df["paid"] = df["paid_loss"].fillna(0) + df["paid_expense"].fillna(0)
     df["outstanding"] = df["outstanding_loss"].fillna(0) + df["outstanding_expense"].fillna(0)
@@ -181,12 +181,17 @@ def summarize(df, group_cols, premium, large):
 def attach_premium(out, group_cols, premium):
     if group_cols == ["policy_year"]:
         p = premium.groupby("policy_year")["earned_premium"].sum().reset_index()
-        out = out.merge(p, on="policy_year", how="left")
-    elif group_cols == ["policy_year", "line"]:
-        p = premium[premium["line"] != "ALL"]
-        out = out.merge(p[["policy_year", "line", "earned_premium"]], on=group_cols, how="left")
+    elif group_cols in (["policy_year", "line"], ["line"]):
+        p = (premium[premium["line"] != "ALL"]
+             .groupby(group_cols)["earned_premium"].sum().reset_index())
     else:
         return out
+    out = out.merge(p, on=group_cols, how="outer")
+    premium_only = out["claims"].isna()
+    out.loc[premium_only, ["paid", "outstanding", "incurred"]] = 0
+    for c in ["claims", "open_claims", "claims_over_large_loss"]:
+        out[c] = out[c].fillna(0).astype(int)
+    out = out.sort_values(group_cols).reset_index(drop=True)
     out["loss_ratio"] = out["incurred"] / out["earned_premium"]
     out.loc[out["earned_premium"].isna() | (out["earned_premium"] == 0), "loss_ratio"] = float("nan")
     return out
@@ -199,14 +204,14 @@ def add_maturity(by_year, df):
         py = r["policy_year"]
         start = starts.get(py)
         if pd.isna(start):
-            start = pd.Timestamp(int(py), 1, 1) if pd.notna(py) else pd.NaT
+            start = pd.NaT
         val = pd.Timestamp(r["latest_valuation"]) if pd.notna(r["latest_valuation"]) else pd.NaT
         months = None
         if pd.notna(start) and pd.notna(val):
             months = (val.year - start.year) * 12 + (val.month - start.month)
         rows.append(months)
     by_year["maturity_months"] = rows
-    by_year["immature"] = by_year["maturity_months"].map(lambda m: bool(m is not None and m < 24))
+    by_year["immature"] = by_year["maturity_months"].map(lambda m: bool(m is None or m < 24))
     return by_year
 
 
@@ -264,7 +269,7 @@ def main():
 
     by_year = add_maturity(summarize(df, ["policy_year"], premium, a.large_loss), df)
     by_year_line = summarize(df, ["policy_year", "line"], premium, a.large_loss)
-    by_line = summarize(df, ["line"], None, a.large_loss)
+    by_line = summarize(df, ["line"], premium, a.large_loss)
 
     total_inc = df["incurred"].sum()
     cols = ["carrier", "policy_year", "line", "claim_number", "loss_date", "status", "cause",
@@ -320,6 +325,7 @@ def main():
         "as_of": a.as_of,
         "totals": totals,
         "by_year": records(by_year),
+        "by_year_line": records(by_year_line),
         "by_line": records(by_line),
         "large_losses": records(large),
         "top_causes": records(causes),

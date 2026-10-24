@@ -50,7 +50,7 @@ python scripts/summarize_loss_runs.py claims.csv \
 
 - `--large-loss`: individual claim threshold for the large-loss list. Default 50,000. Use the user's number if given.
 - `--as-of`: the date used to judge stale valuations. Default today.
-- Writes `loss_summary.xlsx` (sheets: Summary_by_Year, Summary_by_Line, Large_Losses, Open_Claims, Data_Flags, Claims) and `loss_summary.json`.
+- Writes `loss_summary.xlsx` (sheets: Summary_by_Year, Summary_by_Year_Line, Summary_by_Line, Large_Losses, Open_Claims, Data_Flags, Claims) and `loss_summary.json`.
 
 ### 3. Read the flags
 
