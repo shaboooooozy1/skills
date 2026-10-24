@@ -83,6 +83,8 @@ def main():
             errs, warns = ([f"symlinks are not allowed in a skill: {', '.join(links)}"] if links else []), []
         else:
             errs, warns = house_rules(d)
+        if d.is_symlink() or (d / "SKILL.md").is_symlink():
+            errs.insert(0, "the skill folder or its SKILL.md is a symlink; skills must be real folders")
         if not ok:
             errs.insert(0, msg)
         rel = d.relative_to(ROOT)

@@ -203,6 +203,10 @@ def compute_amounts(df, flags):
     known_out = df[["outstanding_loss", "outstanding_expense"]].sum(axis=1, min_count=1)
     df.loc[~has_split, "paid"] = known_paid[~has_split]
     df.loc[~has_split, "outstanding"] = known_out[~has_split]
+    # On any incomplete split, the side whose loss amount is blank stays unknown, never a reported zero,
+    # so paid/outstanding totals know they are incomplete. Incurred above still uses the known parts.
+    df.loc[partial & df["paid_loss"].isna(), "paid"] = float("nan")
+    df.loc[partial & df["outstanding_loss"].isna(), "outstanding"] = float("nan")
 
     for i, r in df.iterrows():
         if partial[i]:

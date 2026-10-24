@@ -587,6 +587,25 @@ with tempfile.TemporaryDirectory() as tmp:
             check(fails([RET, "mm.csv", "--retentions", "1000", flag_name, empty], "is empty"),
                   f"empty {flag_name} {empty!r} accepted")
 
+    # Codex round on 55645aa.
+    (tp / "half.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\nT,2024,GL,H1,2024-03-01,open,100,,2026-09-30\n")
+    run([LR, "half.csv", "--as-of", "2026-10-24", "--out", "half"], tmp)
+    ht = json.loads((tp / "half.json").read_text())["totals"]
+    check(ht["outstanding"] is None and ht["paid"] == 100 and ht["incurred"] == 100,
+          f"blank outstanding reported as zero: {ht}")
+    check(fails([RET, "mm.csv", "--retentions", "1000", "--lines", "WCC"], "schema line code"), "--lines WCC accepted")
+    sl = tp / "sl"
+    (sl / "scripts").mkdir(parents=True)
+    (sl / "outside/real").mkdir(parents=True)
+    (sl / "plugins/p/skills").mkdir(parents=True)
+    (sl / "scripts/package_zips.py").write_text((ROOT / "scripts/package_zips.py").read_text())
+    (sl / "outside/real/SKILL.md").write_text("---\nname: real\ndescription: x\n---\n")
+    (sl / "outside/real/secret.txt").write_text("not for packaging")
+    (sl / "plugins/p/skills/s").symlink_to(sl / "outside/real", target_is_directory=True)
+    r = subprocess.run([sys.executable, "-I", str(sl / "scripts/package_zips.py")], capture_output=True, text=True)
+    check(r.returncode != 0 and "symlink" in r.stderr and not (sl / "dist/s.zip").exists(),
+          f"symlinked skill folder packaged: {r.stderr[-200:]}")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"

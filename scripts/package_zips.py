@@ -23,6 +23,9 @@ def main():
     out.mkdir(exist_ok=True)
     for skill_md in sorted((ROOT / "plugins").glob("*/skills/*/SKILL.md")):
         d = skill_md.parent
+        if d.is_symlink() or skill_md.is_symlink():
+            # a symlinked skill folder would package files from outside the plugin
+            raise SystemExit(f"{d}: the skill folder or its SKILL.md is a symlink. Skills must be real folders.")
         root = d.resolve()
         links = [f for f in d.rglob("*") if f.is_symlink()]
         if links:

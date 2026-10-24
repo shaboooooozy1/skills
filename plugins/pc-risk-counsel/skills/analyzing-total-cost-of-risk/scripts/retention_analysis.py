@@ -26,6 +26,7 @@ import pandas as pd
 from openpyxl.styles import Font
 
 SPLIT = ["paid_loss", "paid_expense", "outstanding_loss", "outstanding_expense"]
+LINE_CODES = {"WC", "GL", "AL", "APD", "PROP", "UMB", "PL", "EPL", "DO", "CYB", "CARGO", "IM", "OTHER"}  # schema.md
 
 
 def read_table(path):
@@ -305,6 +306,9 @@ def main():
         df = df[df["policy_year"].isin(years)]
     if a.lines:
         keep = {x.strip().upper() for x in a.lines.split(",") if x.strip()}
+        if keep - LINE_CODES:
+            sys.exit(f"--lines {', '.join(sorted(keep - LINE_CODES))} not a schema line code. "
+                     f"Use {', '.join(sorted(LINE_CODES))}.")
         df = df[df["line"].isin(keep)]
         notes.append(f"Lines included: {', '.join(sorted(keep))}.")
     if not years:
