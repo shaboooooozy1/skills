@@ -155,7 +155,7 @@ def load(path):
         bad = raw.ne("") & ~raw.str.lower().isin({"n/a", "na", "-", "--"}) & df[c].isna()
         df.loc[bad, "_bad"] += c + " "
         df.loc[df[c] < 0, "_bad"] += f"negative {c} "
-    df["valuation_date"] = pd.to_datetime(df.get("valuation_date", ""), errors="coerce")
+    df["valuation_date"] = pd.to_datetime(df.get("valuation_date", ""), errors="coerce", format="ISO8601")  # ISO only
     df["line"] = df["line"].str.strip().str.upper()
     df["carrier"] = df["carrier"].str.strip()
     df["claim_number"] = df["claim_number"].str.strip()  # same keys as summarize_loss_runs.py

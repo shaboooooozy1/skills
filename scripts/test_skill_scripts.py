@@ -720,6 +720,18 @@ with tempfile.TemporaryDirectory() as tmp:
     a0 = json.loads((tp / "agg0.json").read_text())["summary"][0]
     check(a0["years_aggregate_hit"] == 1, f"claim-free year counted as hitting a $0 aggregate: {a0['years_aggregate_hit']}")
 
+    # Codex round on 6235e98.
+    (tp / "iso.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\nT,2024,GL,I1,2024-03-01,closed,100,0,01/02/2025\n")
+    run([LR, "iso.csv", "--as-of", "2026-10-24", "--out", "iso"], tmp)
+    check(json.loads((tp / "iso.json").read_text())["flag_counts"].get("missing_field") == 1,
+          "non-ISO valuation date 01/02/2025 was guessed instead of flagged")
+    (tp / "mc.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\nA,2024,GL,M1,2024-03-01,closed,100,0,2026-09-30\nB,2024,AL,M2,2024-03-01,closed,100,0,2026-09-30\n")
+    (tp / "mc_prem.csv").write_text("policy_year,line,earned_premium\n2022,GL,1000\n2024,GL,1000\n2024,AL,1000\n")
+    run([LR, "mc.csv", "--premium", "mc_prem.csv", "--as-of", "2026-10-24", "--out", "mc"], tmp)
+    y22 = [y for y in json.loads((tp / "mc.json").read_text())["by_year"] if y["policy_year"] == 2022][0]
+    check(y22["maturity_months"] is None and y22["immature"] is True,
+          f"claim-free year borrowed another carrier's report date: {y22['maturity_months']}")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"

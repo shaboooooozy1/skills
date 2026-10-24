@@ -135,7 +135,8 @@ def load_claims(path):
     df["policy_year"] = valid_year(df["policy_year"])
     eff_raw = df["policy_effective"].astype(str).str.strip()
     for c in ["loss_date", "valuation_date", "policy_effective"]:
-        df[c] = pd.to_datetime(df[c].replace("", None), errors="coerce")
+        # ISO dates only (schema.md): 01/02/2025 could be Jan 2 or Feb 1, so it counts as unreadable
+        df[c] = pd.to_datetime(df[c].replace("", None), errors="coerce", format="ISO8601")
     df["_bad_effective"] = eff_raw.ne("") & df["policy_effective"].isna()  # supplied but unreadable
     # policy_year is the term's start year (schema.md). An effective date in another year is a typo
     # in one of the two; flag it and stop using the date, so it cannot shift maturity or the term check.
@@ -452,7 +453,9 @@ def add_maturity(by_year, df):
     date makes the year unknown, and unknown counts as immature. A claim-free year is measured
     from Dec 31 (or its known start) to the latest loss-run report date.
     """
-    report_date = df["valuation_date"].max()
+    # A claim-free year has no report of its own. Borrow a report date only when one carrier wrote the
+    # whole file; with several carriers, another carrier's newer report says nothing about that year.
+    report_date = df["valuation_date"].max() if df["carrier"].nunique() == 1 else pd.NaT
 
     def months_between(start, val):
         # Completed months only: Jan 31 to Jan 1 two years later is 23, not 24.
@@ -469,6 +472,8 @@ def add_maturity(by_year, df):
             if pd.notna(report_date):
                 months = months_between(start, report_date)
                 basis = "assumed Dec 31 start; valued at latest report date (no claims this year)"
+            elif df["carrier"].nunique() > 1:
+                months, basis = None, "unknown (no claims this year and several carriers report on different dates)"
             else:
                 months, basis = None, "unknown (no valuation date)"
         else:
