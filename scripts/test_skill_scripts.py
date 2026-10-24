@@ -333,7 +333,7 @@ with tempfile.TemporaryDirectory() as tmp:
     pw = openpyxl.load_workbook(tp / "f8r.xlsx")["Claims_Over_Retention"]
     check("aggregate" in [c.value for c in pw[1]], "piercing claims do not identify the option")
     (tp / "tc_nan.json").write_text('{"periods": [{"label": "n", "premiums": "NaN", "source": "s"}]}')
-    check(fails([TCOR, "tc_nan.json"], "finite"), "non-finite TCOR input not rejected")
+    check(fails([TCOR, "tc_nan.json"], "'NaN'"), "non-finite TCOR input not rejected")
     (tp / "tc_negamt.json").write_text(json.dumps({"periods": [{"label": "n", "premiums": 1, "source": "s",
                                                                 "collateral": {"amount": -1, "cost_rate": 0.01}}]}))
     check(fails([TCOR, "tc_negamt.json"], "cannot be negative"), "negative collateral amount not rejected")
@@ -372,7 +372,7 @@ with tempfile.TemporaryDirectory() as tmp:
           "split/carrier mismatch not noted in replay")
     check(fails([LR, "mm.csv", "--large-loss", "nan"], "--large-loss"), "non-finite large-loss threshold accepted")
     (tp / "inf.csv").write_text("Year,Premium\n2024,Infinity\n")
-    check(fails([CHART, "inf.csv", "--title", "x"], "finite"), "non-finite chart value accepted")
+    check(fails([CHART, "inf.csv", "--title", "x"], "'Infinity'"), "non-finite chart value accepted")
     (tp / "inf2.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
         "T,2024,GL,G1,2024-03-01,closed,Infinity,0,2026-09-30\n")
@@ -435,6 +435,40 @@ with tempfile.TemporaryDirectory() as tmp:
     check(nm["summary"][0].get("avg_annual_retained_mature_years", 0) is None
           and "mature-years average is withheld" in " ".join(nm["notes"]),
           f"mature average published without --immature-years: {nm['summary'][0]}")
+
+    # Codex round on 168f624.
+    (tp / "mat.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
+        "T,2020,GL,M1,2020-03-01,closed,100,0,2026-09-30\nT,2020,GL,M2,2020-04-01,closed,100,0,\n")
+    run([LR, "mat.csv", "--as-of", "2026-10-24", "--out", "mat"], tmp)
+    m20 = json.loads((tp / "mat.json").read_text())["by_year"][0]
+    check(m20["immature"] is True and m20["maturity_months"] is None,
+          f"policy with an undated claim marked mature: {m20}")
+    (tp / "fracp.csv").write_text("policy_year,line,earned_premium\n2024.5,GL,1000\n2024,GL,2000\n")
+    run([LR, "mm.csv", "--premium", "fracp.csv", "--as-of", "2026-10-24", "--out", "fracp"], tmp)
+    fp = json.loads((tp / "fracp.json").read_text()) if (tp / "fracp.json").exists() else {"flag_counts": {}}
+    check(fp["flag_counts"].get("premium_bad_year") == 1, f"fractional premium year not flagged: {fp['flag_counts']}")
+    for bad in ("1,00", "1$00"):
+        (tp / "tc_sep.json").write_text(json.dumps({"periods": [{"label": "P", "premiums": bad}]}))
+        check(fails([TCOR, "tc_sep.json"], "Not a number"), f"TCOR accepted malformed premium {bad}")
+    (tp / "tc_scalar.json").write_text(json.dumps({"periods": [{"label": "P", "premiums": "$1,250", "admin": 300}]}))
+    run([TCOR, "tc_scalar.json", "--out", "tc_scalar"], tmp)
+    det = [c.value for row in openpyxl.load_workbook(tp / "tc_scalar.xlsx")["Detail"].iter_rows() for c in row]
+    check(1250 in det and 300 in det, f"scalar components missing from Detail sheet: {det}")
+    (tp / "wide.csv").write_text("Year,Revenue\n2024,1,000\n")
+    check(fails([CHART, "wide.csv", "--title", "x"], "more fields than the header"), "unquoted 1,000 charted as 1")
+    (tp / "badsep.csv").write_text('Year,Revenue\n2024,"1,00"\n')
+    check(fails([CHART, "badsep.csv", "--title", "x"], "Non-numeric"), "chart accepted 1,00 as 100")
+    (tp / "pos.csv").write_text("Year,Change\n2024,5\n2025,8\n")
+    probe = ("import runpy, sys, matplotlib.figure as F\n"
+             "orig = F.Figure.savefig\n"
+             "def save(self, *a, **k):\n"
+             "    print('YLIM', self.axes[0].get_ylim()[0]); return orig(self, *a, **k)\n"
+             "F.Figure.savefig = save\n"
+             f"sys.argv = [{str(CHART)!r}, 'pos.csv', '--title', 'x', '--benchmark', '-3', '--out', 'negbm']\n"
+             f"runpy.run_path({str(CHART)!r}, run_name='__main__')\n")
+    out = subprocess.run([sys.executable, "-I", "-c", probe], cwd=tmp, capture_output=True, text=True).stdout
+    ylo = [float(x.split()[1]) for x in out.splitlines() if x.startswith("YLIM")]
+    check(bool(ylo) and ylo[0] <= -3, f"negative benchmark clipped by the axis: {ylo}")
 
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(

@@ -13,6 +13,7 @@ Usage:
 import argparse
 import json
 import math
+import re
 import sys
 
 import pandas as pd
@@ -28,13 +29,30 @@ LABELS = {
 }
 
 
+MONEY_RE = re.compile(r"[+-]?\$?[+-]?(\d{1,3}(,\d{3})+|\d+)?(\.\d+)?")
+
+
+def parse_money(s):
+    """Strict money text: '$1,250.50', '-1250', '(1,000)'. Malformed separators ('1,00', '1$00') -> None."""
+    s = s.strip()
+    neg = s.startswith("(") and s.endswith(")")
+    if neg:
+        s = s[1:-1].strip()
+    if not s or not MONEY_RE.fullmatch(s) or not any(ch.isdigit() for ch in s):
+        return None
+    n = float(s.replace("$", "").replace(",", ""))
+    return -n if neg else n
+
+
 def num(v, where):
     if v is None or v == "":
         return 0.0
     try:
-        n = float(v) if isinstance(v, (int, float)) else float(str(v).replace(",", "").replace("$", ""))
+        n = float(v) if isinstance(v, (int, float)) else parse_money(str(v))
     except ValueError:
-        sys.exit(f"Not a number at {where}: {v!r}")
+        n = None
+    if n is None:
+        sys.exit(f"Not a number at {where}: {v!r}. Check commas and $ signs, e.g. 1,000 or 1000.")
     if not math.isfinite(n):
         sys.exit(f"Not a finite number at {where}: {v!r}")
     return n
@@ -44,7 +62,8 @@ def sum_block(block, where):
     if block is None:
         return 0.0, {}
     if isinstance(block, (int, float, str)):
-        return num(block, where), {}
+        n = num(block, where)
+        return n, {"(single amount)": n}  # keep scalar inputs in the Detail sheet's audit trail
     items = {k: num(v, f"{where}.{k}") for k, v in block.items()}
     return sum(items.values()), items
 

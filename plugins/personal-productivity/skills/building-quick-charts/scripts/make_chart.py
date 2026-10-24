@@ -9,6 +9,7 @@ Usage:
 import argparse
 import csv
 import math
+import re
 import sys
 
 import matplotlib
@@ -38,6 +39,21 @@ def fmt_value(v, kind):
     return f"{v:,.0f}" if abs(v) >= 100 else f"{v:,.2f}".rstrip("0").rstrip(".")
 
 
+MONEY_RE = re.compile(r"[+-]?\$?[+-]?(\d{1,3}(,\d{3})+|\d+)?(\.\d+)?")
+
+
+def parse_money(s):
+    """Strict money text: '$1,250.50', '-1250', '(1,000)'. Malformed separators ('1,00', '1$00') -> None."""
+    s = s.strip()
+    neg = s.startswith("(") and s.endswith(")")
+    if neg:
+        s = s[1:-1].strip()
+    if not s or not MONEY_RE.fullmatch(s) or not any(ch.isdigit() for ch in s):
+        return None
+    n = float(s.replace("$", "").replace(",", ""))
+    return -n if neg else n
+
+
 def read_csv(path):
     with open(path, newline="", encoding="utf-8-sig") as f:
         rows = [r for r in csv.reader(f) if any(c.strip() for c in r)]
@@ -48,18 +64,22 @@ def read_csv(path):
     dupes = sorted({n for n in names if names.count(n) > 1})
     if dupes:
         sys.exit(f"Duplicate column name(s): {', '.join(dupes)}. Rename them so no series is dropped.")
+    wide = [i + 2 for i, r in enumerate(body) if len(r) > len(header) and any(c.strip() for c in r[len(header):])]
+    if wide:
+        sys.exit(f"Row(s) {', '.join(map(str, wide))} have more fields than the header. Quote numbers "
+                 "with commas, e.g. \"1,000\", or remove the extra fields.")
     cats = [r[0] for r in body]
     series = {}
     for j, name in enumerate(header[1:], start=1):
         vals = []
         for r in body:
-            raw = (r[j] if j < len(r) else "").strip().replace(",", "").replace("$", "")
-            if raw.endswith("%"):
-                raw = str(float(raw[:-1]) / 100)
-            try:
-                v = float(raw) if raw else math.nan  # blank = unknown, never zero
-            except ValueError:
-                sys.exit(f"Non-numeric value {r[j]!r} in column {name!r}.")
+            raw = (r[j] if j < len(r) else "").strip()
+            pct = raw.endswith("%")
+            v = parse_money(raw[:-1] if pct else raw) if raw else math.nan  # blank = unknown, never zero
+            if v is None:
+                sys.exit(f"Non-numeric value {r[j]!r} in column {name!r}. Check commas and $ signs.")
+            if pct:
+                v /= 100
             if raw and not math.isfinite(v):
                 sys.exit(f"Value {r[j]!r} in column {name!r} is not a finite number.")
             vals.append(v)
@@ -150,7 +170,7 @@ def main():
     ax.set_xticklabels(cats)
     ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: fmt_value(v, a.format)))
     lo, hi = ax.get_ylim()
-    has_negative = any(v < 0 for vals in series.values() for v in vals)
+    has_negative = any(v < 0 for vals in series.values() for v in vals) or (a.benchmark or 0) < 0
     bottom = lo if (a.type == "line" or has_negative) else 0
     ax.set_ylim(bottom, hi * 1.08 if (a.labels and hi > 0) else hi)
     ax.grid(axis="y", color=GRID, linewidth=1)

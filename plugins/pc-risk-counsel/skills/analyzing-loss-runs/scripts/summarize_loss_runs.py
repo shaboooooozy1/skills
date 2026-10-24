@@ -385,7 +385,8 @@ def add_maturity(by_year, df):
             results = []
             for (_, _, eff), u in units:
                 start = eff if pd.notna(eff) else pd.Timestamp(int(py), 12, 1)
-                val = u["valuation_date"].max()
+                # any claim with an unknown valuation leaves the whole policy's maturity unknown
+                val = pd.NaT if u["valuation_date"].isna().any() else u["valuation_date"].max()
                 results.append((None if pd.isna(val) else months_between(start, val), pd.notna(eff)))
             if any(m is None for m, _ in results):
                 months, basis = None, "unknown (a policy in this year has no valuation date)"
@@ -465,7 +466,8 @@ def main():
         for c in ["policy_year", "line", "earned_premium"]:
             if c not in premium.columns:
                 sys.exit(f"premium.csv is missing column: {c}")
-        premium["policy_year"] = pd.to_numeric(premium["policy_year"], errors="coerce").astype("Int64")
+        ppy = pd.to_numeric(premium["policy_year"], errors="coerce")
+        premium["policy_year"] = ppy.where(ppy.notna() & (ppy % 1 == 0)).astype("Int64")  # 2024.5 -> bad year
         bad_year = premium[premium["policy_year"].isna()]
         if len(bad_year):
             flags.append({"row": None, "carrier": "", "claim_number": f"({len(bad_year)} premium rows)",
