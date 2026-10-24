@@ -20,6 +20,7 @@ from matplotlib.ticker import FuncFormatter  # noqa: E402
 
 # Neutral, colorblind-safe palette. First series gets the strongest color.
 PALETTE = ["#1F4E79", "#E07B39", "#5B8E7D", "#8C6BB1", "#A0A0A0"]
+HATCHES = ["", "//", "..", "xx"]  # second, third, fourth pass through the palette
 INK = "#222222"
 MUTED = "#6B6B6B"
 GRID = "#E3E3E3"
@@ -66,6 +67,8 @@ def read_csv(path):
         sys.exit("CSV needs a header row and at least one data row with 2+ columns.")
     header, body = rows[0], rows[1:]
     names = [h.strip() for h in header[1:]]
+    if any(not nm for nm in names):
+        sys.exit("Every series column needs a header name; a blank one would leave a series out of the legend.")
     dupes = sorted({n for n in names if names.count(n) > 1})
     if dupes:
         sys.exit(f"Duplicate column name(s): {', '.join(dupes)}. Rename them so no series is dropped.")
@@ -120,8 +123,10 @@ def main():
 
     if a.type == "line":
         for i, name in enumerate(names):
-            ax.plot(x, series[name], color=PALETTE[i % len(PALETTE)], linewidth=2.5, marker="o",
-                    markersize=6, label=name)
+            # after the palette runs out, change line style and marker so no two series look alike
+            k = i // len(PALETTE)
+            ax.plot(x, series[name], color=PALETTE[i % len(PALETTE)], linewidth=2.5,
+                    linestyle=["-", "--", ":", "-."][k % 4], marker="osD^v"[k % 5], markersize=6, label=name)
             if a.labels:
                 for xi, v in zip(x, series[name]):
                     if math.isnan(v):
@@ -140,7 +145,8 @@ def main():
         for i, name in enumerate(names):
             vals = series[name]
             bottoms = [pb if v >= 0 else nb for v, pb, nb in zip(vals, pos_base, neg_base)]
-            bars = ax.bar(x, vals, 0.6, bottom=bottoms, color=PALETTE[i % len(PALETTE)], label=name)
+            bars = ax.bar(x, vals, 0.6, bottom=bottoms, color=PALETTE[i % len(PALETTE)], label=name,
+                          hatch=HATCHES[(i // len(PALETTE)) % len(HATCHES)], edgecolor="white")
             if a.labels:
                 for b, v, btm in zip(bars, vals, bottoms):
                     if v and abs(v) >= 0.08 * tallest:
@@ -151,13 +157,19 @@ def main():
         if a.labels:
             for xi, top, low in zip(x, pos_base, neg_base):
                 net = top + low
-                ax.text(xi, top if top > 0 else low, fmt_value(net, a.format), ha="center",
-                        va="bottom" if top > 0 else "top", fontsize=10)
+                if top > 0 and low < 0:
+                    # mixed signs: the net sits at neither end of the stack, so mark it where it is
+                    ax.plot([xi - 0.32, xi + 0.32], [net, net], color=INK, linewidth=1.6)
+                    ax.text(xi + 0.34, net, "net " + fmt_value(net, a.format), ha="left", va="center", fontsize=9)
+                else:
+                    ax.text(xi, top if top > 0 else low, fmt_value(net, a.format), ha="center",
+                            va="bottom" if top > 0 else "top", fontsize=10)
     else:
         width = 0.7 / n
         for i, name in enumerate(names):
             offs = [xi - 0.35 + width * (i + 0.5) for xi in x]
-            bars = ax.bar(offs, series[name], width * 0.92, color=PALETTE[i % len(PALETTE)], label=name)
+            bars = ax.bar(offs, series[name], width * 0.92, color=PALETTE[i % len(PALETTE)], label=name,
+                          hatch=HATCHES[(i // len(PALETTE)) % len(HATCHES)], edgecolor="white")
             if a.labels:
                 for b, v in zip(bars, series[name]):
                     if math.isnan(v):

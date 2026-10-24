@@ -792,6 +792,42 @@ with tempfile.TemporaryDirectory() as tmp:
     r = subprocess.run([sys.executable, "-I", str(pv / "scripts/validate_skills.py")], capture_output=True, text=True)
     check("Traceback" not in r.stderr and "must be a JSON object" in r.stdout, f"list plugin.json crashed: {r.stderr[-200:]}")
 
+    # Codex round on 1486329.
+    (tp / "blankhdr.csv").write_text("Year,A, \n2024,1,2\n")
+    check(fails([CHART, "blankhdr.csv", "--title", "x"], "header name"), "blank series header accepted")
+    (tp / "tc_kind.json").write_text(json.dumps({"periods": [{"label": "P", "kind": "scenerio", "premiums": 1000}]}))
+    check(fails([TCOR, "tc_kind.json"], "kind must be"), "misspelled period kind accepted")
+    (tp / "zp.csv").write_text("policy_year,line,earned_premium\n2024,GL,1000\n2024,UMB,0\n")
+    run([LR, "mm.csv", "--premium", "zp.csv", "--as-of", "2026-10-24", "--out", "zp"], tmp)
+    zl = {r["line"]: r for r in json.loads((tp / "zp.json").read_text())["by_line"]}
+    check(zl["UMB"]["earned_premium"] == 0 and zl["UMB"]["loss_ratio"] is None,
+          f"explicit zero premium shown as unknown: {zl['UMB']}")
+    (tp / "six.csv").write_text("Year,A,B,C,D,E,F\n2024,1,2,3,4,5,6\n2025,2,3,4,5,6,7\n")
+    probe6 = ("import runpy, sys, matplotlib.figure as F\n"
+              "orig = F.Figure.savefig\n"
+              "def save(self, *a, **k):\n"
+              "    ls = self.axes[0].get_lines()\n"
+              "    print('STYLES', len({(l.get_color(), l.get_linestyle(), l.get_marker()) for l in ls}), len(ls))\n"
+              "    return orig(self, *a, **k)\n"
+              "F.Figure.savefig = save\n"
+              f"sys.argv = [{str(CHART)!r}, 'six.csv', '--title', 'x', '--type', 'line', '--out', 'six']\n"
+              f"runpy.run_path({str(CHART)!r}, run_name='__main__')\n")
+    out6 = subprocess.run([sys.executable, "-I", "-c", probe6], cwd=tmp, capture_output=True, text=True).stdout
+    st = [x.split()[1:] for x in out6.splitlines() if x.startswith("STYLES")]
+    check(bool(st) and st[0][0] == st[0][1], f"six line series share an encoding: {st}")
+    (tp / "mix.csv").write_text("Item,Gain,Credit\nA,100,-40\n")
+    probem = ("import runpy, sys, matplotlib.figure as F\n"
+              "orig = F.Figure.savefig\n"
+              "def save(self, *a, **k):\n"
+              "    for t in self.axes[0].texts: print('TEXT', t.get_text(), t.get_position()[1])\n"
+              "    return orig(self, *a, **k)\n"
+              "F.Figure.savefig = save\n"
+              f"sys.argv = [{str(CHART)!r}, 'mix.csv', '--title', 'x', '--type', 'stacked', '--labels', '--out', 'mix']\n"
+              f"runpy.run_path({str(CHART)!r}, run_name='__main__')\n")
+    outm = subprocess.run([sys.executable, "-I", "-c", probem], cwd=tmp, capture_output=True, text=True).stdout
+    net = [x for x in outm.splitlines() if x.startswith("TEXT net 60")]
+    check(bool(net) and float(net[0].split()[-1]) == 60, f"mixed-sign net label not at the net value: {outm}")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"

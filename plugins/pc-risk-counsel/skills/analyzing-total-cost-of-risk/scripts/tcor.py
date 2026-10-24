@@ -99,7 +99,10 @@ def sum_block(block, where):
 
 def compute_period(p, i):
     label = str(p.get("label") or f"period_{i + 1}")  # a year like 2025 is a valid label
-    row = {"label": label, "kind": p.get("kind", "actual")}
+    kind = p.get("kind", "actual")
+    if kind not in ("actual", "scenario"):
+        sys.exit(f"{label}: kind must be \"actual\" or \"scenario\", not {kind!r}.")
+    row = {"label": label, "kind": kind}
     detail, open_items = [], []
     if p.get("premiums") in (None, "", {}, []):
         sys.exit(f"{label}: premiums are missing. TCOR cannot be computed without them.")

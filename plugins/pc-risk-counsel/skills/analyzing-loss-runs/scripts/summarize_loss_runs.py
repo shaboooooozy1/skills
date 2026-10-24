@@ -430,10 +430,11 @@ def line_ratios(by_line, by_year_line):
     rated = known[known["earned_premium"] > 0]  # a zero-premium year cannot be rated
     # every line in the year-line table stays, including premium-only lines whose amount is unknown
     lines = pd.DataFrame({"line": pd.Series(sorted(set(by_year_line["line"].dropna())), dtype=object)})
-    g = rated.groupby("line").agg(earned_premium=("earned_premium", "sum"),
-                                  incurred_in_rated_years=("incurred", "sum"),
+    # premium total keeps explicit zeros (a confirmed $0 stays 0, not blank); the ratio uses rated years only
+    shown = known[known["earned_premium"] >= 0].groupby("line")["earned_premium"].sum().rename("earned_premium")
+    g = rated.groupby("line").agg(incurred_in_rated_years=("incurred", "sum"),
                                   rated_years=("policy_year", lambda s: ", ".join(str(int(y)) for y in sorted(s))))
-    g = lines.merge(g.reset_index(), on="line", how="left")
+    g = lines.merge(shown.reset_index(), on="line", how="left").merge(g.reset_index(), on="line", how="left")
     out = by_line.merge(g, on="line", how="outer")  # premium-only lines stay, at zero losses
     for c in ["claims", "open_claims", "incurred", "claims_over_large_loss"]:
         out[c] = out[c].fillna(0)
