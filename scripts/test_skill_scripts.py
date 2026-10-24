@@ -643,6 +643,32 @@ with tempfile.TemporaryDirectory() as tmp:
     check(rows_flagged == [5], f"data flag points at the wrong line after blank lines: {rows_flagged}")
     check(fails([RET, "mm.csv", "--retentions", "25,000.50"], "thousands separators"), "25,000.50 split into $25 and $0.50")
 
+    # Codex round on 4620519.
+    for bad_col in ([1000], 1000):
+        (tp / "tc_col2.json").write_text(json.dumps({"periods": [{"label": "P", "premiums": 1000, "collateral": bad_col}]}))
+        check(fails([TCOR, "tc_col2.json"], "collateral must be an object"), f"collateral {bad_col!r} crashed TCOR")
+    (tp / "effy.csv").write_text("carrier,policy_year,policy_effective,policy_number,line,claim_number,loss_date,status,"
+        "paid_loss,outstanding_loss,valuation_date\nT,2024,2023-01-01,P1,GL,E1,2023-06-01,closed,100,0,2026-09-30\n")
+    run([LR, "effy.csv", "--as-of", "2026-10-24", "--out", "effy"], tmp)
+    ey = json.loads((tp / "effy.json").read_text())["flag_counts"]
+    check(ey.get("effective_year_mismatch") == 1, f"effective date in the wrong year not flagged: {ey}")
+    (tp / "oldv.csv").write_text("carrier,policy_year,policy_effective,policy_number,line,claim_number,loss_date,status,"
+        "paid_loss,outstanding_loss,valuation_date\n"
+        "T,2024,2024-01-01,P1,GL,O1,2024-03-01,closed,100,0,2025-12-31\n"
+        "T,2024,2024-01-01,P1,GL,O2,2024-04-01,closed,100,0,2026-02-28\n")
+    run([LR, "oldv.csv", "--as-of", "2026-03-01", "--out", "oldv"], tmp)
+    ov = json.loads((tp / "oldv.json").read_text())["by_year"][0]
+    check(ov["maturity_months"] == 23 and ov["immature"] is True,
+          f"policy maturity used the newest valuation instead of the oldest: {ov['maturity_months']}")
+    dz = tp / "dz"
+    (dz / "scripts").mkdir(parents=True)
+    for plug in ("a", "b"):
+        (dz / f"plugins/{plug}/skills/same").mkdir(parents=True)
+        (dz / f"plugins/{plug}/skills/same/SKILL.md").write_text(f"---\nname: same\ndescription: {plug}\n---\n")
+    (dz / "scripts/package_zips.py").write_text((ROOT / "scripts/package_zips.py").read_text())
+    r = subprocess.run([sys.executable, "-I", str(dz / "scripts/package_zips.py")], capture_output=True, text=True)
+    check(r.returncode != 0 and "more than one plugin" in r.stderr, f"duplicate skill names overwrote a ZIP: {r.stderr[-200:]}")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"

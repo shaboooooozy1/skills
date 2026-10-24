@@ -136,6 +136,12 @@ def load_claims(path):
     for c in ["loss_date", "valuation_date", "policy_effective"]:
         df[c] = pd.to_datetime(df[c].replace("", None), errors="coerce")
     df["_bad_effective"] = eff_raw.ne("") & df["policy_effective"].isna()  # supplied but unreadable
+    # policy_year is the term's start year (schema.md). An effective date in another year is a typo
+    # in one of the two; flag it and stop using the date, so it cannot shift maturity or the term check.
+    eff_year = df["policy_effective"].dt.year
+    df["_eff_mismatch"] = df["policy_effective"].notna() & df["policy_year"].notna() & (eff_year != df["policy_year"])
+    df["_eff_given"] = df["policy_effective"].dt.date.astype(str)
+    df.loc[df["_eff_mismatch"], "policy_effective"] = pd.NaT
     return df
 
 
@@ -264,6 +270,10 @@ def check_rows(df, flags):
         if r["line"] and r["line"] not in LINE_CODES:
             flag(flags, r, "unknown_line", f"Line '{r['line']}' is not a schema code. Fix the typo, or use OTHER "
                  "and put the carrier's label in cause.")
+        if r.get("_eff_mismatch"):
+            flag(flags, r, "effective_year_mismatch",
+                 f"policy_effective {r['_eff_given']} is not in policy year {int(r['policy_year'])}. Date ignored: "
+                 "maturity assumes a Dec 1 start and the term check uses the policy year. Confirm which is right.")
         if r.get("_bad_effective"):
             flag(flags, r, "unreadable_date", "policy_effective is unreadable. Maturity assumes a Dec 1 start and "
                  "the policy-term check is skipped. Confirm the date.")
@@ -462,7 +472,8 @@ def add_maturity(by_year, df):
             for (_, _, eff), u in units:
                 start = eff if pd.notna(eff) else pd.Timestamp(int(py), 12, 1)
                 # any claim with an unknown valuation leaves the whole policy's maturity unknown
-                val = pd.NaT if u["valuation_date"].isna().any() else u["valuation_date"].max()
+                # the oldest valuation in the policy sets its maturity: older-valued amounts are still in use
+                val = pd.NaT if u["valuation_date"].isna().any() else u["valuation_date"].min()
                 results.append((None if pd.isna(val) else months_between(start, val), pd.notna(eff)))
             if any(m is None for m, _ in results):
                 months, basis = None, "unknown (a policy in this year has no valuation date)"

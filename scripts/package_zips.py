@@ -32,7 +32,13 @@ def main():
     a = ap.parse_args()
     out = (ROOT / a.out).resolve()
     out.mkdir(exist_ok=True)
-    for skill_md in sorted((ROOT / "plugins").glob("*/skills/*/SKILL.md")):
+    skill_mds = sorted((ROOT / "plugins").glob("*/skills/*/SKILL.md"))
+    names = [s.parent.name for s in skill_mds]
+    clash = sorted({n for n in names if names.count(n) > 1})
+    if clash:
+        # ZIPs are named after the skill folder; two plugins with the same skill name would overwrite each other
+        raise SystemExit(f"Skill name(s) {', '.join(clash)} appear in more than one plugin. Rename one.")
+    for skill_md in skill_mds:
         d = skill_md.parent
         link = linked_path(skill_md)
         if link:

@@ -115,6 +115,8 @@ def compute_period(p, i):
         for k, v in items.items():
             detail.append({"label": label, "component": LABELS[comp], "item": k, "amount": v})
     col = p.get("collateral") or {}
+    if not isinstance(col, dict):
+        sys.exit(f"{label}.collateral must be an object like {{\"amount\": 500000, \"cost_rate\": 0.015}}.")
     if col:
         open_items += [f"{LABELS['collateral_cost']}: {k} blank (counted as 0)"
                        for k in ("amount", "cost_rate") if col.get(k) in (None, "")]
