@@ -29,6 +29,9 @@ def main():
             # A symlink could pull runner-local files (credentials, /proc) into a published ZIP.
             raise SystemExit(f"{d.name}: symlinks are not allowed in skills: "
                              + ", ".join(str(f.relative_to(d)) for f in links))
+        if (d.parent.parent / "LICENSE").is_symlink():
+            # checked before any ZIP is written, so a dereferenced runner file never lands in dist/
+            raise SystemExit(f"{d.parent.parent / 'LICENSE'} is a symlink. Plugin licenses must be regular files.")
         files = [f for f in sorted(d.rglob("*"))
                  if f.is_file() and not f.is_symlink() and f.resolve().is_relative_to(root)
                  and not (set(f.parts) & SKIP_PARTS)]

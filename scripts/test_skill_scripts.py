@@ -470,6 +470,40 @@ with tempfile.TemporaryDirectory() as tmp:
     ylo = [float(x.split()[1]) for x in out.splitlines() if x.startswith("YLIM")]
     check(bool(ylo) and ylo[0] <= -3, f"negative benchmark clipped by the axis: {ylo}")
 
+    # Codex round on d3e68aa.
+    (tp / "par.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
+        'T,2024,GL,P1,2024-03-01,closed,"(-$1,000)",0,2026-09-30\nT,2024,GL,P2,2024-03-01,closed,"($-1,000)",0,2026-09-30\n')
+    run([LR, "par.csv", "--as-of", "2026-10-24", "--out", "par"], tmp)
+    pr = json.loads((tp / "par.json").read_text())
+    check(pr["flag_counts"].get("unreadable_amount") == 2, f"(-$1,000) read as positive: {pr['flag_counts']}")
+    check(fails([RET, "par.csv", "--retentions", "1000"], "P1 (paid_loss)"), "replay read (-$1,000) as positive")
+    (tp / "tc_par.json").write_text(json.dumps({"periods": [{"label": "P", "premiums": "(-$1,000)"}]}))
+    check(fails([TCOR, "tc_par.json"], "Not a number"), "TCOR read (-$1,000) as positive")
+    for empty in ("", ",", ";"):
+        check(fails([RET, "mm.csv", "--retentions", empty], "at least one number"), f"empty retentions {empty!r} accepted")
+    (tp / "eq.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
+        "T,2024,GL,E1,2024-03-01,closed,600,0,2026-09-30\nT,2024,GL,E2,2024-03-01,closed,400,0,2026-09-30\n")
+    run([RET, "eq.csv", "--retentions", "1000", "--aggregate", "1000", "--immature-years", "none", "--out", "eq"], tmp)
+    eq = json.loads((tp / "eq.json").read_text())["summary"][0]
+    check(eq["years_aggregate_hit"] == 1 and eq["total_retained"] == 1000,
+          f"aggregate reached exactly not counted as hit: {eq}")
+    check(fails([RET, "eq.csv", "--retentions", "1000", "--immature-years", "20245"], "not in the replay years"),
+          "mistyped immature year accepted")
+    (tp / "tc_bool.json").write_text(json.dumps({"periods": [{"label": "P", "premiums": True}]}))
+    check(fails([TCOR, "tc_bool.json"], "Not a number"), "JSON true accepted as a premium")
+    (tp / "tc_lbl.json").write_text(json.dumps({"periods": [{"label": 2025, "premiums": 1000}]}))
+    run([TCOR, "tc_lbl.json", "--out", "tc_lbl"], tmp)
+    check((tp / "tc_lbl.json").exists() and (tp / "tc_lbl.xlsx").exists(), "numeric period label crashed TCOR")
+    pz = tp / "pz"
+    (pz / "scripts").mkdir(parents=True)
+    (pz / "plugins/p/skills/s").mkdir(parents=True)
+    (pz / "scripts/package_zips.py").write_text((ROOT / "scripts/package_zips.py").read_text())
+    (pz / "plugins/p/skills/s/SKILL.md").write_text("---\nname: s\ndescription: x\n---\n")
+    (pz / "plugins/p/LICENSE").symlink_to("/etc/hostname")
+    r = subprocess.run([sys.executable, "-I", str(pz / "scripts/package_zips.py")], capture_output=True, text=True)
+    check(r.returncode != 0 and "symlink" in r.stderr and not (pz / "dist/s.zip").exists(),
+          f"symlinked plugin LICENSE packaged: {r.stderr[-200:]}")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"

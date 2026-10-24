@@ -40,6 +40,8 @@ def parse_money(s):
         s = s[1:-1].strip()
     if not s or not MONEY_RE.fullmatch(s) or not any(ch.isdigit() for ch in s):
         return None
+    if neg and ("-" in s or "+" in s):
+        return None  # "(-$1,000)" mixes two negative notations; never let them cancel out
     n = float(s.replace("$", "").replace(",", ""))
     return -n if neg else n
 
@@ -48,6 +50,8 @@ def num(v, where):
     if v is None or v == "":
         return 0.0
     try:
+        if isinstance(v, bool):
+            raise ValueError  # JSON true/false is not an amount
         n = float(v) if isinstance(v, (int, float)) else parse_money(str(v))
     except ValueError:
         n = None
@@ -61,7 +65,7 @@ def num(v, where):
 def sum_block(block, where):
     if block is None:
         return 0.0, {}
-    if isinstance(block, (int, float, str)):
+    if isinstance(block, (bool, int, float, str)):
         n = num(block, where)
         return n, {"(single amount)": n}  # keep scalar inputs in the Detail sheet's audit trail
     items = {k: num(v, f"{where}.{k}") for k, v in block.items()}
@@ -69,7 +73,7 @@ def sum_block(block, where):
 
 
 def compute_period(p, i):
-    label = p.get("label") or f"period_{i + 1}"
+    label = str(p.get("label") or f"period_{i + 1}")  # a year like 2025 is a valid label
     row = {"label": label, "kind": p.get("kind", "actual")}
     detail, open_items = [], []
     if p.get("premiums") in (None, "", {}, []):

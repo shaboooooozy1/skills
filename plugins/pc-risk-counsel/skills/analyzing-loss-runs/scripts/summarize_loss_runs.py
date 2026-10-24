@@ -48,6 +48,8 @@ def to_number(v):
         s = s[1:].strip()
         if not sign and s[:1] in ("+", "-"):
             sign, s = s[0], s[1:]
+    if neg and sign:
+        return float("nan")  # "(-$1,000)" mixes two negative notations; never let them cancel out
     # Validate the whole format before dropping separators: "12,34" or "1(2)" is an OCR or typing
     # error, not 1234 or 12, so it stays unreadable and gets flagged.
     if re.search(r"[()$\s]", s):

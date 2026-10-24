@@ -50,6 +50,8 @@ def parse_money(s):
         s = s[1:-1].strip()
     if not s or not MONEY_RE.fullmatch(s) or not any(ch.isdigit() for ch in s):
         return None
+    if neg and ("-" in s or "+" in s):
+        return None  # "(-$1,000)" mixes two negative notations; never let them cancel out
     n = float(s.replace("$", "").replace(",", ""))
     return -n if neg else n
 

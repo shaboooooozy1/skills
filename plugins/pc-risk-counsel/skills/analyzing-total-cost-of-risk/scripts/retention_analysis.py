@@ -43,6 +43,8 @@ def to_number(v):
         s = s[1:].strip()
         if not sign and s[:1] in ("+", "-"):
             sign, s = s[0], s[1:]
+    if neg and sign:
+        return float("nan")  # "(-$1,000)" mixes two negative notations; never let them cancel out
     # Validate the whole format before dropping separators: "12,34" or "1(2)" is an OCR or typing
     # error, not 1234 or 12, so it stays unreadable and gets flagged.
     if re.search(r"[()$\s]", s):
@@ -86,6 +88,8 @@ def money_list(s, name):
         vals = [float(x) for x in parts]
     except ValueError:
         sys.exit(f"--{name} must be numbers separated by commas, e.g. 25000,50000")
+    if not vals:
+        sys.exit(f"--{name} needs at least one number, e.g. 25000,50000")
     if not all(math.isfinite(v) for v in vals):
         sys.exit(f"--{name} values must be finite numbers.")
     return vals
@@ -254,6 +258,10 @@ def main():
     if len(bad):
         sys.exit("Fix these amounts before replaying (run summarize_loss_runs.py to see every data flag): "
                  + ", ".join(f"{n or '(no claim number)'} ({b.strip()})" for n, b in zip(bad["claim_number"], bad["_bad"])))
+    stray = sorted(immature - set(years))
+    if stray:
+        sys.exit(f"--immature-years {', '.join(map(str, stray))} not in the replay years "
+                 f"({years[0]}-{years[-1]}). Check for a typo.")
     empty_years = [y for y in years if not (df["policy_year"] == y).any()]
     if empty_years:
         notes.append(f"No claims in {', '.join(map(str, empty_years))} for the selected lines. Counted as zero "
@@ -267,8 +275,8 @@ def main():
             g = df[df["policy_year"] == y]
             per_claim = g["amount"].clip(upper=ret)
             retained = float(per_claim.sum())
-            capped = bool(agg is not None and retained > agg)
-            if capped:
+            capped = bool(agg is not None and retained >= agg)  # reaching the cap exactly exhausts it
+            if agg is not None and retained > agg:
                 retained = agg
             total = float(g["amount"].sum())
             over = g[g["amount"] > ret]
