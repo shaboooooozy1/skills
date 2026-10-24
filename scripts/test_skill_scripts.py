@@ -633,6 +633,16 @@ with tempfile.TemporaryDirectory() as tmp:
           == rr["summary"][0]["total_retained"],
           f"net-negative claim: summary {rc['totals']['incurred']} vs replay {rr['summary'][0]['total_retained']}")
 
+    # Codex round on 9c33941.
+    (tp / "blank.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\nT,2024,GL,B1,2024-03-01,closed,100,0,2026-09-30\n\n\n"
+        "T,2024,GL,B2,2024-03-01,bogus,100,0,2026-09-30\n")
+    run([LR, "blank.csv", "--as-of", "2026-10-24", "--out", "blank"], tmp)
+    bf = openpyxl.load_workbook(tp / "blank.xlsx")["Data_Flags"]
+    hdr = [c.value for c in bf[1]]
+    rows_flagged = [r[hdr.index("row")] for r in bf.iter_rows(min_row=2, values_only=True) if r[hdr.index("flag")] == "bad_status"]
+    check(rows_flagged == [5], f"data flag points at the wrong line after blank lines: {rows_flagged}")
+    check(fails([RET, "mm.csv", "--retentions", "25,000.50"], "thousands separators"), "25,000.50 split into $25 and $0.50")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"

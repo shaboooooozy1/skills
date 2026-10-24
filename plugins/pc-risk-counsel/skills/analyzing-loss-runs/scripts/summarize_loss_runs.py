@@ -37,18 +37,23 @@ def read_table(path):
     """Read a CSV as text, stopping on repeated headers. pandas would rename a second
     'paid_loss' to 'paid_loss.1' and quietly ignore it."""
     with open(path, newline="", encoding="utf-8-sig") as f:
-        rows = list(csv.reader(f))
-    header = rows[0] if rows else []
-    wide = [i + 1 for i, r in enumerate(rows[1:], start=1)
-            if len(r) != len(header) and any(c.strip() for c in r)]
+        reader = csv.reader(f)
+        header = next(reader, [])
+        body = []  # (physical line number in the file, fields); blank lines skipped but still counted
+        for r in reader:
+            if any(c.strip() for c in r):
+                body.append((reader.line_num, r))
+    wide = [n for n, r in body if len(r) != len(header)]
     if wide:
-        sys.exit(f"{path}: row(s) {', '.join(map(str, wide[:10]))} have a different number of fields than the "
+        sys.exit(f"{path}: line(s) {', '.join(map(str, wide[:10]))} have a different number of fields than the "
                  "header. Quote amounts with commas, e.g. \"1,000\".")
     norm = [h.strip().lower() for h in header]
     dupes = sorted({h for h in norm if h and norm.count(h) > 1})
     if dupes:
         sys.exit(f"{path}: column(s) {', '.join(dupes)} appear more than once. Keep one of each.")
-    return pd.read_csv(path, dtype=str, keep_default_na=False, encoding="utf-8-sig")
+    df = pd.DataFrame([r for _, r in body], columns=header, dtype=str)
+    df["_line"] = [n for n, _ in body]  # real file line, so data flags point at the right record
+    return df
 
 
 def guard_outputs(inputs, out):
@@ -114,7 +119,7 @@ def load_claims(path):
     for c in ["policy_effective", "cause", "claim_type", "policy_number"]:
         if c not in df.columns:
             df[c] = ""
-    df["_row"] = range(2, len(df) + 2)  # spreadsheet row number incl. header
+    df["_row"] = df.pop("_line")  # physical line in the file (header is line 1)
     df["_unreadable"] = ""
     for c in MONEY:
         raw = df[c].astype(str).str.strip()
