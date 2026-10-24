@@ -147,8 +147,12 @@ def compute_period(p, i):
     row["exposure"] = num(exp, f"{label}.exposure") if exp not in (None, "") else None
     if row["exposure"] is not None and row["exposure"] <= 0:
         sys.exit(f"{label}.exposure must be positive. Leave it out if it is unknown.")
-    row["notes"] = p.get("notes", "")
-    row["source"] = "" if p.get("source") is None else p.get("source")  # JSON null = no source
+    for fld in ("notes", "source"):
+        v = p.get(fld)
+        if isinstance(v, bool) or (v is not None and not isinstance(v, (str, int, float))):
+            sys.exit(f"{label}.{fld} must be text, not {type(v).__name__}.")
+    row["notes"] = "" if p.get("notes") is None else str(p.get("notes"))
+    row["source"] = "" if p.get("source") is None else str(p.get("source"))  # JSON null = no source
     if not str(row["source"]).strip():
         open_items.append("No source given for this period's figures")
         row["open_items"] = "; ".join(open_items)

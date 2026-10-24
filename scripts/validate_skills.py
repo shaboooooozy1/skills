@@ -127,7 +127,15 @@ def main():
 
     mp = ROOT / ".claude-plugin" / "marketplace.json"
     market = json.loads(mp.read_text())
-    for plug in market.get("plugins", []):
+    plugs = market.get("plugins", []) if isinstance(market, dict) else None
+    if not isinstance(plugs, list):
+        print("FAIL marketplace.json: must be an object with a 'plugins' list")
+        plugs, failed = [], failed + 1
+    for plug in plugs:
+        if not isinstance(plug, dict) or not isinstance(plug.get("source"), str) or "name" not in plug:
+            print(f"FAIL marketplace.json: each plugin needs a name and a source path, got {plug!r}"[:200])
+            failed += 1
+            continue
         src = ROOT / plug["source"]
         if not src.exists():
             print(f"FAIL marketplace plugin '{plug['name']}': source {plug['source']} missing")

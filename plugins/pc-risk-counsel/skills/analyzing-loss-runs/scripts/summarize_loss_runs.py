@@ -431,8 +431,11 @@ def line_ratios(by_line, by_year_line):
     # every line in the year-line table stays, including premium-only lines whose amount is unknown
     lines = pd.DataFrame({"line": pd.Series(sorted(set(by_year_line["line"].dropna())), dtype=object)})
     # premium total keeps explicit zeros (a confirmed $0 stays 0, not blank); the ratio uses rated years only
-    shown = known[known["earned_premium"] >= 0].groupby("line")["earned_premium"].sum().rename("earned_premium")
-    g = rated.groupby("line").agg(incurred_in_rated_years=("incurred", "sum"),
+    # Shown premium keeps every known amount, zero and negative adjustments included (it matches the year
+    # totals). The ratio uses only rated years, so it gets its own premium column.
+    shown = known.groupby("line")["earned_premium"].sum().rename("earned_premium")
+    g = rated.groupby("line").agg(premium_in_rated_years=("earned_premium", "sum"),
+                                  incurred_in_rated_years=("incurred", "sum"),
                                   rated_years=("policy_year", lambda s: ", ".join(str(int(y)) for y in sorted(s))))
     g = lines.merge(shown.reset_index(), on="line", how="left").merge(g.reset_index(), on="line", how="left")
     out = by_line.merge(g, on="line", how="outer")  # premium-only lines stay, at zero losses
@@ -442,7 +445,7 @@ def line_ratios(by_line, by_year_line):
         out[c] = out[c].astype(int)
     out.loc[out["claims"] == 0, ["paid", "outstanding"]] = 0.0
     out = out.sort_values("line").reset_index(drop=True)
-    out["loss_ratio"] = out["incurred_in_rated_years"] / out["earned_premium"].where(out["earned_premium"] != 0)
+    out["loss_ratio"] = out["incurred_in_rated_years"] / out["premium_in_rated_years"].where(out["premium_in_rated_years"] > 0)
     return out
 
 
@@ -530,7 +533,7 @@ def write_xlsx(path, sheets):
                 if header in {"paid", "outstanding", "incurred", "avg_incurred_per_claim", "largest_claim",
                               "earned_premium", "paid_loss", "paid_expense", "outstanding_loss",
                               "outstanding_expense", "recoveries", "carrier_incurred",
-                              "written_premium", "mixed_premium", "incurred_in_rated_years"}:
+                              "written_premium", "mixed_premium", "incurred_in_rated_years", "premium_in_rated_years"}:
                     for c in col[1:]:
                         c.number_format = '$#,##0;($#,##0)'
                 elif header.startswith("loss_ratio") or header == "share_of_total_incurred":

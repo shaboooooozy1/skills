@@ -76,7 +76,10 @@ def read_csv(path):
     if wide:
         sys.exit(f"Row(s) {', '.join(map(str, wide))} have more fields than the header. Quote numbers "
                  "with commas, e.g. \"1,000\", or remove the extra fields.")
-    cats = [r[0] for r in body]
+    cats = [r[0].strip() for r in body]
+    blank = [i + 2 for i, c in enumerate(cats) if not c]
+    if blank:
+        sys.exit(f"Row(s) {', '.join(map(str, blank))} have no label in the first column. Name each category.")
     series = {}
     for j, name in enumerate(header[1:], start=1):
         vals = []

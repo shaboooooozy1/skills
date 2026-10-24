@@ -828,6 +828,32 @@ with tempfile.TemporaryDirectory() as tmp:
     net = [x for x in outm.splitlines() if x.startswith("TEXT net 60")]
     check(bool(net) and float(net[0].split()[-1]) == 60, f"mixed-sign net label not at the net value: {outm}")
 
+    # Codex round on 52825e4.
+    (tp / "blankcat.csv").write_text("Year,A\n2024,1\n ,2\n")
+    check(fails([CHART, "blankcat.csv", "--title", "x"], "no label"), "blank category label accepted")
+    for fld in ("source", "notes"):
+        (tp / "tc_txt.json").write_text(json.dumps({"periods": [{"label": "P", "premiums": 1000, fld: ["a"]}]}))
+        check(fails([TCOR, "tc_txt.json"], "must be text"), f"list {fld} crashed TCOR")
+    (tp / "neg_prem.csv").write_text("policy_year,line,earned_premium\n2024,GL,1000\n2023,GL,-100\n2024,UMB,-100\n")
+    run([LR, "mm.csv", "--premium", "neg_prem.csv", "--as-of", "2026-10-24", "--out", "negl2"], tmp)
+    nl = {r["line"]: r for r in json.loads((tp / "negl2.json").read_text())["by_line"]}
+    check(nl["GL"]["earned_premium"] == 900 and nl["UMB"]["earned_premium"] == -100
+          and round(nl["GL"]["loss_ratio"], 4) == round(100 / 1000, 4),
+          f"negative premium adjustments dropped from line totals: {nl['GL']}, {nl['UMB']}")
+    mk = tp / "mk"
+    (mk / "scripts").mkdir(parents=True)
+    (mk / "skills/skill-creator/scripts").mkdir(parents=True)
+    (mk / "plugins").mkdir()
+    (mk / ".claude-plugin").mkdir()
+    (mk / "scripts/validate_skills.py").write_text((ROOT / "scripts/validate_skills.py").read_text())
+    (mk / "skills/skill-creator/scripts/quick_validate.py").write_text(
+        (ROOT / "skills/skill-creator/scripts/quick_validate.py").read_text())
+    for bad in ("[]", '{"plugins": "x"}', '{"plugins": [1]}'):
+        (mk / ".claude-plugin/marketplace.json").write_text(bad)
+        r = subprocess.run([sys.executable, "-I", str(mk / "scripts/validate_skills.py")], capture_output=True, text=True)
+        check("Traceback" not in r.stderr and "FAIL marketplace.json" in r.stdout,
+              f"malformed marketplace.json {bad} crashed the validator: {r.stderr[-150:]}")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"
