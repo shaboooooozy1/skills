@@ -135,6 +135,19 @@ with tempfile.TemporaryDirectory() as tmp:
          "--out", "blank"], tmp)
     check((tp / "blank.png").exists(), "blank-cell chart failed")
 
+    # Third review round: an old claim-free year is mature; by-line ratio uses rated years only.
+    (tp / "old.csv").write_text(
+        "carrier,policy_year,policy_effective,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
+        "T,2021,2021-07-01,GL,G1,2021-08-01,closed,5000,0,2026-09-30\n"
+        "T,2023,2023-07-01,GL,G2,2023-08-01,closed,7000,0,2026-09-30\n")
+    (tp / "old_prem.csv").write_text("policy_year,line,earned_premium\n2022,GL,10000\n2023,GL,10000\n")
+    run([LR, "old.csv", "--premium", "old_prem.csv", "--as-of", "2026-10-24", "--out", "old"], tmp)
+    o = json.loads((tp / "old.json").read_text())
+    oy = {y["policy_year"]: y for y in o["by_year"]}
+    check(oy[2022]["immature"] is False, f"claim-free 2022 should be mature: {oy[2022]}")
+    gl = [r for r in o["by_line"] if r["line"] == "GL"][0]
+    check(abs(gl["loss_ratio"] - 7000 / 20000) < 1e-9, f"by-line ratio should use rated years only: {gl}")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"

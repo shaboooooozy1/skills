@@ -284,6 +284,7 @@ def add_maturity(by_year, df):
     latest possible start (Dec 1 of the policy year) so maturity is never overstated. Unknown
     maturity counts as immature."""
     starts = df.groupby("policy_year")["policy_effective"].min()
+    report_date = df["valuation_date"].max()
     months_col, basis_col = [], []
     for _, r in by_year.iterrows():
         py = r["policy_year"]
@@ -293,6 +294,10 @@ def add_maturity(by_year, df):
             start = pd.Timestamp(int(py), 12, 1) if pd.notna(py) else pd.NaT
             basis = "assumed Dec 1 start (no policy_effective)"
         val = pd.Timestamp(r["latest_valuation"]) if pd.notna(r["latest_valuation"]) else pd.NaT
+        if pd.isna(val) and pd.notna(report_date):
+            # Claim-free year: the loss runs still cover it as of the latest report date.
+            val = report_date
+            basis += "; valued at latest report date (no claims this year)"
         months = None
         if pd.notna(start) and pd.notna(val):
             months = (val.year - start.year) * 12 + (val.month - start.month)
