@@ -23,7 +23,10 @@ jobs:
         run: python scripts/test_skill_scripts.py
       - name: Build upload ZIPs
         run: python scripts/package_zips.py
+      # Install ZIPs are published only from main. Pull request builds still package (to prove it
+      # works) but never upload, so an unreviewed PR cannot replace the install artifact.
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           name: skill-zips
           path: dist/*.zip

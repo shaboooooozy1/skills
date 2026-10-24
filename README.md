@@ -20,7 +20,7 @@ Skills for a commercial P&C and employee benefits client executive. Each one tur
 /plugin install personal-productivity@bloomstine-skills
 ```
 
-**Claude.ai** — download a skill ZIP from the latest GitHub Actions run (artifact `skill-zips`) or build them with `python scripts/package_zips.py`. Upload in Customize > Skills.
+**Claude.ai** — download a skill ZIP from the latest **main-branch** run of the Validate skills workflow (artifact `skill-zips`; pull request runs do not publish it), or build them yourself from a checkout of `main` with `python scripts/package_zips.py`. Upload in Customize > Skills.
 
 **API** — upload the skill folder through the Skills API. Scripts need `pandas`, `openpyxl`, and `matplotlib`.
 

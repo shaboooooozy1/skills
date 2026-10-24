@@ -10,6 +10,7 @@
 - Charts: negative values are no longer clipped at zero; blank cells show as gaps, not zeros.
 - `m365-email-command-center` description narrowed to inbox-level work.
 - Security: workbook writers in all three risk scripts force any text starting with `=` to a plain string, so carrier-supplied text can never open as a live Excel formula. The text itself is kept exactly as printed.
+- Security: the `skill-zips` install artifact is uploaded only from pushes to `main`, never from pull request runs.
 - README: upstream install section now adds this repository's marketplace.
 
 ### Added
