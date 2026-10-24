@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -23,12 +26,26 @@ jobs:
         run: python -m pyflakes plugins/*/skills/*/scripts/*.py scripts/*.py
       - name: Run script tests on synthetic data
         run: python scripts/test_skill_scripts.py
-      - name: Build upload ZIPs
+      - name: Check that ZIPs build
         run: python scripts/package_zips.py
-      # Install ZIPs are published only from main. Pull request builds still package (to prove it
-      # works) but never upload, so an unreviewed PR cannot replace the install artifact.
+
+  # The published install ZIPs are built in a separate job that installs nothing from PyPI.
+  # package_zips.py uses only the standard library, so no third-party package can touch the
+  # files that go into the artifact. Runs only on pushes to main, after validation passes.
+  publish:
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build install ZIPs (standard library only)
+        run: python -I -S scripts/package_zips.py
       - uses: actions/upload-artifact@v4
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           name: skill-zips
           path: dist/*.zip

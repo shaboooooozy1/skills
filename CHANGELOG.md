@@ -11,7 +11,7 @@
 - `m365-email-command-center` description narrowed to inbox-level work.
 - Security: workbook writers in all three risk scripts force any text starting with `=` to a plain string, so carrier-supplied text can never open as a live Excel formula. The text itself is kept exactly as printed.
 - Security: the `skill-zips` install artifact is uploaded only from pushes to `main`, never from pull request runs.
-- Security: skills may not contain symlinks (validator and packager both fail), the packager archives only regular files inside the skill folder, and CI checkout no longer persists the job token.
+- Security: skills may not contain symlinks (validator and packager both fail), the packager archives only regular files inside the skill folder, and CI checkout no longer persists the job token. Published ZIPs are built in a separate job that installs nothing from PyPI and runs the standard-library packager in isolated mode; the workflow is read-only.
 - README: upstream install section now adds this repository's marketplace.
 
 ### Added
