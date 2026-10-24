@@ -18,7 +18,7 @@ One row per claim. Header row required. Column order does not matter. Unknown co
 | paid_expense | * | number | ALAE / expense paid |
 | outstanding_loss | * | number | Case reserve, loss |
 | outstanding_expense | * | number | Case reserve, expense |
-| recoveries | no | number | Subrogation, salvage, deductible reimbursement received. Positive number. |
+| recoveries | no | number | Subrogation, salvage, deductible reimbursement received. Positive number. A blank cell means none reported and counts as 0, because carrier loss runs list recoveries only where they exist. If the report has no recoveries column at all, the summary says incurred is gross of recoveries. |
 | carrier_incurred | * | number | Total incurred as printed by the carrier |
 | valuation_date | yes | YYYY-MM-DD | "Valued as of" date on that report |
 | cause | no | text | Short cause or claim type ("rear-end," "slip and fall," "strain - lifting") |

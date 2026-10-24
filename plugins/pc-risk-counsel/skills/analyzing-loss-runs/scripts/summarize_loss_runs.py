@@ -113,6 +113,7 @@ def load_claims(path):
     missing = [c for c in REQUIRED if c not in df.columns]
     if missing:
         sys.exit(f"claims.csv is missing required columns: {', '.join(missing)}")
+    df["_has_recoveries_col"] = "recoveries" in df.columns
     for c in MONEY:
         if c not in df.columns:
             df[c] = ""
@@ -273,9 +274,9 @@ def check_rows(df, flags):
         if r.get("_eff_mismatch"):
             flag(flags, r, "effective_year_mismatch",
                  f"policy_effective {r['_eff_given']} is not in policy year {int(r['policy_year'])}. Date ignored: "
-                 "maturity assumes a Dec 1 start and the term check uses the policy year. Confirm which is right.")
+                 "maturity assumes a Dec 31 start and the term check uses the policy year. Confirm which is right.")
         if r.get("_bad_effective"):
-            flag(flags, r, "unreadable_date", "policy_effective is unreadable. Maturity assumes a Dec 1 start and "
+            flag(flags, r, "unreadable_date", "policy_effective is unreadable. Maturity assumes a Dec 31 start and "
                  "the policy-term check is skipped. Confirm the date.")
         if r["status"] and r["status"] not in STATUSES:
             flag(flags, r, "bad_status", f"Status '{r['status']}' is not open, closed, or reopened.")
@@ -443,9 +444,9 @@ def add_maturity(by_year, df):
     Each policy (carrier + policy number + effective date) is measured on its own: from its term
     start to its latest valuation. The year gets the minimum, so one late-starting or early-valued
     policy keeps the year immature. Without a policy_effective date the start is assumed to be
-    Dec 1 of the policy year (never overstates maturity). A policy with no readable valuation
+    Dec 31 of the policy year, the latest possible start (never overstates maturity). A policy with no readable valuation
     date makes the year unknown, and unknown counts as immature. A claim-free year is measured
-    from Dec 1 (or its known start) to the latest loss-run report date.
+    from Dec 31 (or its known start) to the latest loss-run report date.
     """
     report_date = df["valuation_date"].max()
 
@@ -460,17 +461,17 @@ def add_maturity(by_year, df):
         if pd.isna(py):
             months, basis = None, "unknown (no policy year)"
         elif year_rows.empty:
-            start = pd.Timestamp(int(py), 12, 1)
+            start = pd.Timestamp(int(py), 12, 31)
             if pd.notna(report_date):
                 months = months_between(start, report_date)
-                basis = "assumed Dec 1 start; valued at latest report date (no claims this year)"
+                basis = "assumed Dec 31 start; valued at latest report date (no claims this year)"
             else:
                 months, basis = None, "unknown (no valuation date)"
         else:
             units = year_rows.groupby(["carrier", "policy_number", "policy_effective"], dropna=False)
             results = []
             for (_, _, eff), u in units:
-                start = eff if pd.notna(eff) else pd.Timestamp(int(py), 12, 1)
+                start = eff if pd.notna(eff) else pd.Timestamp(int(py), 12, 31)
                 # any claim with an unknown valuation leaves the whole policy's maturity unknown
                 # the oldest valuation in the policy sets its maturity: older-valued amounts are still in use
                 val = pd.NaT if u["valuation_date"].isna().any() else u["valuation_date"].min()
@@ -480,7 +481,7 @@ def add_maturity(by_year, df):
             else:
                 months = min(m for m, _ in results)
                 basis = ("least mature policy in the year"
-                         + ("" if all(k for _, k in results) else "; Dec 1 start assumed where no policy_effective"))
+                         + ("" if all(k for _, k in results) else "; Dec 31 start assumed where no policy_effective"))
         months_col.append(months)
         basis_col.append(basis)
     by_year["maturity_months"] = months_col
@@ -628,6 +629,9 @@ def main():
         "carriers": sorted(df["carrier"].unique().tolist()),
         "policy_years": [int(y) for y in sorted(df["policy_year"].dropna().unique())],
         "incurred_from_carrier_total_only": int((df["incurred_source"] == "carrier").sum()),
+        "recoveries_note": (None if bool(df["_has_recoveries_col"].iloc[0]) else
+                            "No recoveries column. Incurred is gross of any subrogation or salvage. Ask the "
+                            "carrier whether recoveries exist before using net figures."),
     }
     if premium is not None:
         # All-years ratio uses only the years whose premium covers every line with claims.

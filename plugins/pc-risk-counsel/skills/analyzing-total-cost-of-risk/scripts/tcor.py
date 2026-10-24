@@ -168,9 +168,9 @@ def main():
 
     with open(a.inputs) as f:
         cfg = json.load(f, object_pairs_hook=no_duplicate_keys)
-    periods = cfg.get("periods") or []
-    if not periods:
-        sys.exit("inputs.json needs a non-empty 'periods' list.")
+    periods = cfg.get("periods") if isinstance(cfg, dict) else None
+    if not isinstance(periods, list) or not periods or not all(isinstance(p, dict) for p in periods):
+        sys.exit("inputs.json needs a 'periods' list of objects, e.g. {\"periods\": [{\"label\": \"2025\", ...}]}.")
     base = cfg.get("exposure_base", {})
     base_name = base.get("name", "exposure")
     per = num(base.get("per", 1000), "exposure_base.per")

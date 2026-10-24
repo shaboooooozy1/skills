@@ -88,7 +88,7 @@ with tempfile.TemporaryDirectory() as tmp:
           f"duplicate premium rows not summed: {yl}")
     check(abs(yl[0]["loss_ratio"] - 18000 / 25000) < 1e-9 if yl else False, "2024 GL loss ratio wrong")
     check("open_claims" in e and len(e["open_claims"]) == 2, "open_claims missing from JSON")
-    check(years[2024]["immature"] is True and "Dec 1" in years[2024]["maturity_basis"],
+    check(years[2024]["immature"] is True and "Dec 31" in years[2024]["maturity_basis"],
           f"maturity fallback should be conservative: {years[2024]}")
     import openpyxl
     hdr = [c.value for c in openpyxl.load_workbook(tp / "edge.xlsx")["Claims"][1]]
@@ -668,6 +668,19 @@ with tempfile.TemporaryDirectory() as tmp:
     (dz / "scripts/package_zips.py").write_text((ROOT / "scripts/package_zips.py").read_text())
     r = subprocess.run([sys.executable, "-I", str(dz / "scripts/package_zips.py")], capture_output=True, text=True)
     check(r.returncode != 0 and "more than one plugin" in r.stderr, f"duplicate skill names overwrote a ZIP: {r.stderr[-200:]}")
+
+    # Codex round on 8ad2f26.
+    (tp / "dec.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\nT,2024,GL,D9,2024-12-20,closed,100,0,2026-12-15\n")
+    run([LR, "dec.csv", "--as-of", "2026-12-16", "--out", "dec"], tmp)
+    dy = json.loads((tp / "dec.json").read_text())["by_year"][0]
+    check(dy["immature"] is True and dy["maturity_months"] == 23,
+          f"unknown December start overstated maturity: {dy['maturity_months']}")
+    for bad in ('{"periods": {"label": "P", "premiums": 1}}', '{"periods": ["P"]}', '[1]'):
+        (tp / "tc_shape.json").write_text(bad)
+        check(fails([TCOR, "tc_shape.json"], "list of objects"), f"malformed periods accepted: {bad}")
+    run([LR, "mm.csv", "--as-of", "2026-10-24", "--out", "norec"], tmp)
+    check(json.loads((tp / "norec.json").read_text())["totals"].get("recoveries_note"),
+          "missing recoveries column not mentioned")
 
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(

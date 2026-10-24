@@ -145,6 +145,7 @@ def load(path):
     # Bad amounts are recorded per row and checked in main() after dedupe and the --years/--lines
     # filters, so a superseded valuation or an excluded line never blocks an otherwise valid replay.
     df["_bad"] = ""
+    df["_has_recoveries_col"] = "recoveries" in df.columns
     for c in SPLIT + ["recoveries", "carrier_incurred"]:
         if c not in df.columns:
             df[c] = float("nan")
@@ -296,6 +297,7 @@ def main():
                      "still developing. Rerun with --immature-years (or 'none' if every year is mature).")
 
     df = load(a.claims)
+    had_recoveries = bool(df["_has_recoveries_col"].iloc[0]) if len(df) else True
     odd = df[~df["line"].isin(LINE_CODES)]
     if len(odd):
         # checked before any --lines filter, so a typo like WCC can never vanish from a WC replay
@@ -331,6 +333,8 @@ def main():
     if len(bad):
         sys.exit("Fix these amounts before replaying (run summarize_loss_runs.py to see every data flag): "
                  + ", ".join(f"{n or '(no claim number)'} ({b.strip()})" for n, b in zip(bad["claim_number"], bad["_bad"])))
+    if not had_recoveries:
+        notes.append("No recoveries column. Losses are gross of any subrogation or salvage.")
     df = amounts(df, a.basis, notes)  # diagnostics cover only the claims in scope
     stray = sorted(immature - set(years))
     if stray:
