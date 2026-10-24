@@ -74,6 +74,16 @@ def compute_period(p, i):
     return row, detail
 
 
+def neutralize_formulas(ws):
+    """Keep carrier text as text. openpyxl stores any string starting with '=' as a formula, so a
+    claim number or cause printed that way would calculate when the workbook opens. These scripts
+    write no intentional formulas, so every such cell is forced back to a plain string."""
+    for row in ws.iter_rows():
+        for cell in row:
+            if isinstance(cell.value, str) and cell.value.startswith("="):
+                cell.data_type = "s"
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("inputs")
@@ -110,6 +120,7 @@ def main():
         out.to_excel(xw, sheet_name="TCOR", index=False)
         pd.DataFrame(detail).to_excel(xw, sheet_name="Detail", index=False)
         for ws in xw.sheets.values():
+            neutralize_formulas(ws)
             ws.freeze_panes = "B2"
             for cell in ws[1]:
                 cell.font = Font(bold=True)

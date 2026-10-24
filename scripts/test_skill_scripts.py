@@ -135,6 +135,22 @@ with tempfile.TemporaryDirectory() as tmp:
          "--out", "blank"], tmp)
     check((tp / "blank.png").exists(), "blank-cell chart failed")
 
+    # Security review: carrier text starting with '=' must stay text, never a live formula.
+    (tp / "inj.csv").write_text(
+        "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"
+        'T,2024,GL,"=HYPERLINK(""http://x.test"",""ok"")",2024-06-01,closed,100,0,2026-09-30,=1+1\n')
+    run([LR, "inj.csv", "--as-of", "2026-10-24", "--out", "inj"], tmp)
+    run([RET, "inj.csv", "--retentions", "50", "--out", "inj_ret"], tmp)
+    (tp / "inj_in.json").write_text(json.dumps({"periods": [{"label": "=2+2", "premiums": 1, "source": "=A1"}]}))
+    run([TCOR, "inj_in.json", "--out", "inj_tc"], tmp)
+    for book in ("inj.xlsx", "inj_ret.xlsx", "inj_tc.xlsx"):
+        live = [f"{ws.title}!{c.coordinate}" for ws in openpyxl.load_workbook(tp / book).worksheets
+                for row in ws.iter_rows() for c in row if c.data_type == "f"]
+        check(not live, f"{book} has live formula cells: {live}")
+    claims_ws = openpyxl.load_workbook(tp / "inj.xlsx")["Claims"]
+    vals = [c.value for row in claims_ws.iter_rows(min_row=2) for c in row]
+    check('=HYPERLINK("http://x.test","ok")' in vals, "claim number text not preserved exactly")
+
     (tp / "neg.csv").write_text("Item,Change\nA,500\nB,-300\nC,200\n")
     run([CHART, "neg.csv", "--title", "Credits shown", "--out", "neg"], tmp)
     check((tp / "neg.png").exists(), "negative-value chart failed")

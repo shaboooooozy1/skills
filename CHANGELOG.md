@@ -9,6 +9,7 @@
 - Retention replay: policy years with no claims in the selected lines count as zero retained (new `--years` flag); an undated row never wins over a dated valuation.
 - Charts: negative values are no longer clipped at zero; blank cells show as gaps, not zeros.
 - `m365-email-command-center` description narrowed to inbox-level work.
+- Security: workbook writers in all three risk scripts force any text starting with `=` to a plain string, so carrier-supplied text can never open as a live Excel formula. The text itself is kept exactly as printed.
 - README: upstream install section now adds this repository's marketplace.
 
 ### Added

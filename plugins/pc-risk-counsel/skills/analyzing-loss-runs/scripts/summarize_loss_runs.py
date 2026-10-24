@@ -306,11 +306,22 @@ def add_maturity(by_year, df):
     return by_year
 
 
+def neutralize_formulas(ws):
+    """Keep carrier text as text. openpyxl stores any string starting with '=' as a formula, so a
+    claim number or cause printed that way would calculate when the workbook opens. These scripts
+    write no intentional formulas, so every such cell is forced back to a plain string."""
+    for row in ws.iter_rows():
+        for cell in row:
+            if isinstance(cell.value, str) and cell.value.startswith("="):
+                cell.data_type = "s"
+
+
 def write_xlsx(path, sheets):
     with pd.ExcelWriter(path, engine="openpyxl") as xw:
         for name, frame in sheets.items():
             frame.to_excel(xw, sheet_name=name, index=False)
             ws = xw.sheets[name]
+            neutralize_formulas(ws)
             ws.freeze_panes = "A2"
             for cell in ws[1]:
                 cell.font = Font(bold=True)

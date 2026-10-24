@@ -8,7 +8,7 @@ Before every commit, check `git diff --staged` for real names and numbers.
 
 ## Scripts
 
-Bundled scripts read local files and write local outputs. They make no network calls, read no credentials, and need no API keys. Any change that adds network access must say why in the pull request.
+Bundled scripts read local files and write local outputs. They make no network calls, read no credentials, and need no API keys. Any change that adds network access must say why in the pull request. Workbook writers must keep third-party text inert: no cell may be written as a formula from input data.
 
 ## Third-party skills
 
