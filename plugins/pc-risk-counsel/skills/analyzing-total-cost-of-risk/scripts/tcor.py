@@ -55,6 +55,8 @@ def compute_period(p, i):
     detail, open_items = [], []
     if p.get("premiums") in (None, "", {}, []):
         sys.exit(f"{label}: premiums are missing. TCOR cannot be computed without them.")
+    if isinstance(p["premiums"], dict) and all(v in (None, "") for v in p["premiums"].values()):
+        sys.exit(f"{label}: every premium is blank. TCOR cannot be computed without at least one premium.")
     for comp in ["premiums", "retained_losses", "admin", "risk_control"]:
         block = p.get(comp)
         if block in (None, "", {}):

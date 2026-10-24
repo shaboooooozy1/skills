@@ -83,6 +83,8 @@ def main():
     p.add_argument("--out", default="chart")
     a = p.parse_args()
 
+    if a.benchmark is not None and not math.isfinite(a.benchmark):
+        sys.exit("--benchmark must be a finite number.")
     cats, series = read_csv(a.csv)
     plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 12, "text.color": INK,
                          "axes.labelcolor": MUTED, "xtick.color": MUTED, "ytick.color": MUTED})

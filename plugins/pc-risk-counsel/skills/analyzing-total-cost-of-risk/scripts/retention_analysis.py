@@ -54,7 +54,11 @@ def money_list(s, name):
     if "$" in s:
         sys.exit(f"--{name}: leave out the $ sign, e.g. 25000,50000")
     if ";" in s:
-        parts = [x.strip().replace(",", "") for x in s.split(";") if x.strip()]
+        parts = [x.strip() for x in s.split(";") if x.strip()]
+        for x in parts:
+            if "," in x and not re.fullmatch(r"\d{1,3}(,\d{3})+(\.\d+)?", x):
+                sys.exit(f"--{name}: '{x}' has misplaced thousands separators. Use 25,000 or 25000.")
+        parts = [x.replace(",", "") for x in parts]
     else:
         if re.fullmatch(r"\d{1,3}(,\d{3})+", s):
             sys.exit(f"--{name} '{s}' could be one number with thousands separators or several options. "
@@ -115,6 +119,13 @@ def load(path, basis, notes):
         notes.append(f"{len(names)} claim(s) have two rows with the same latest valuation date "
                      f"({', '.join(names)}). Kept one without knowing which is right. Confirm with the carrier.")
     df = pd.concat([df[no_id], keyed.drop_duplicates(subset=["carrier", "claim_number"], keep="last")])
+    amb = {(c, n) for c, n in ambiguous}
+    undated = [n or "(no claim number)"
+               for c, n, d in zip(df["carrier"], df["claim_number"], df["valuation_date"])
+               if pd.isna(d) and (c, n) not in amb]  # ambiguous duplicates already have their own note
+    if undated:
+        notes.append(f"{len(undated)} claim(s) have no readable valuation date ({', '.join(undated)}). "
+                     "Their amounts may be older than the rest of the data. Confirm the valuation with the carrier.")
     if no_id.any():
         notes.append(f"{int(no_id.sum())} row(s) lack a carrier or claim number and were kept as separate claims.")
     # Same rule as summarize_loss_runs.py: the split is complete when paid_loss and outstanding_loss

@@ -77,7 +77,12 @@ def main():
     failed = 0
     for d in dirs:
         ok, msg = validate_skill(d)
-        errs, warns = ([], []) if d.parent == UPSTREAM else house_rules(d)
+        if d.parent == UPSTREAM:
+            # stylistic house rules skip upstream skills, but the symlink ban applies everywhere
+            links = [str(f.relative_to(d)) for f in d.rglob("*") if f.is_symlink()]
+            errs, warns = ([f"symlinks are not allowed in a skill: {', '.join(links)}"] if links else []), []
+        else:
+            errs, warns = house_rules(d)
         if not ok:
             errs.insert(0, msg)
         rel = d.relative_to(ROOT)

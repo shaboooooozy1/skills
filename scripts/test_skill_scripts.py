@@ -383,6 +383,33 @@ with tempfile.TemporaryDirectory() as tmp:
     check(i2["by_year"][0]["loss_ratio"] is None and i2["totals"]["loss_ratio_years"] == [],
           f"negative premium year rated: {i2['by_year'][0]}")
 
+    # Codex round on d52eef7.
+    (tp / "bm.csv").write_text("Year,Ratio\n2024,0.5\n")
+    check(fails([CHART, "bm.csv", "--title", "x", "--benchmark", "nan"], "--benchmark"), "non-finite benchmark accepted")
+    check(fails([LR, "mm.csv", "--stale-days", "-1"], "--stale-days"), "negative stale-days accepted")
+    check(fails([RET, "f8r.csv", "--retentions", "25,00;50,000"], "thousands separators"),
+          "mistyped thousands separator silently changed the amount")
+    (tp / "tc_blank.json").write_text(json.dumps({"periods": [{"label": "P", "premiums": {"WC": "", "GL": None}}]}))
+    check(fails([TCOR, "tc_blank.json"], "every premium is blank"), "all-blank premiums produced a TCOR")
+    (tp / "nodate.csv").write_text(
+        "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
+        "T,2024,GL,G1,2024-03-01,closed,500,0,\nT,2024,GL,G2,2024-03-01,closed,700,0,2026-09-30\n")
+    run([RET, "nodate.csv", "--retentions", "1000", "--out", "nodate"], tmp)
+    nd = " ".join(json.loads((tp / "nodate.json").read_text())["notes"])
+    check("no readable valuation date (G1)" in nd, f"unique undated claim not noted: {nd}")
+    vs = tp / "vs"
+    (vs / "scripts").mkdir(parents=True)
+    (vs / "skills/skill-creator/scripts").mkdir(parents=True)
+    (vs / "skills/demo").mkdir(parents=True)
+    (vs / "scripts/validate_skills.py").write_text((ROOT / "scripts/validate_skills.py").read_text())
+    (vs / "skills/skill-creator/scripts/quick_validate.py").write_text(
+        (ROOT / "skills/skill-creator/scripts/quick_validate.py").read_text())
+    (vs / "skills/demo/SKILL.md").write_text("---\nname: demo\ndescription: Demo skill. Use when testing.\n---\nBody\n")
+    (vs / "skills/demo/link").symlink_to("/etc/hostname")
+    r = subprocess.run([sys.executable, "-I", str(vs / "scripts/validate_skills.py"), "--only", "skills"],
+                       capture_output=True, text=True)
+    check(r.returncode != 0 and "symlinks are not allowed" in r.stdout, f"upstream symlink accepted: {r.stdout[-300:]}")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"
