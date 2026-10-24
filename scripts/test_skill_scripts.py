@@ -165,6 +165,19 @@ with tempfile.TemporaryDirectory() as tmp:
     umb = [r for r in r4["by_line"] if r["line"] == "UMB"]
     check(len(umb) == 1 and umb[0]["claims"] == 0, f"premium-only line missing: {r4['by_line']}")
 
+    # A blank premium cell must not count as coverage for its line.
+    (tp / "bp.csv").write_text(
+        "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
+        "T,2024,WC,W1,2024-08-01,closed,1000,0,2026-09-30\n"
+        "T,2024,AL,A1,2024-08-01,closed,2000,0,2026-09-30\n")
+    (tp / "bp_prem.csv").write_text("policy_year,line,earned_premium\n2024,WC,10000\n2024,AL,\n")
+    run([LR, "bp.csv", "--premium", "bp_prem.csv", "--as-of", "2026-10-24", "--out", "bp"], tmp)
+    bp = json.loads((tp / "bp.json").read_text())
+    check(bp["by_year"][0]["loss_ratio"] is None and bp["totals"]["loss_ratio_years"] == [],
+          f"blank premium treated as coverage: {bp['by_year'][0]}")
+    check(bp["flag_counts"].get("premium_unreadable") == 1 and bp["flag_counts"].get("premium_missing_lines") == 1,
+          f"flags {bp['flag_counts']}")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"

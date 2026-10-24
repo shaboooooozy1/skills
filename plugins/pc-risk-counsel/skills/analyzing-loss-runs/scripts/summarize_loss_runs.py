@@ -227,7 +227,14 @@ def year_premium(df, premium, flags):
     rows = []
     claim_lines = df.groupby("policy_year")["line"].apply(set)
     for py in sorted(set(premium["policy_year"].dropna()) | set(claim_lines.index.dropna())):
-        prem = premium[premium["policy_year"] == py]
+        prem_all_rows = premium[premium["policy_year"] == py]
+        unknown = prem_all_rows[prem_all_rows["earned_premium"].isna()]
+        if len(unknown):
+            flags.append({"row": None, "carrier": "", "claim_number": f"(policy year {int(py)})",
+                          "flag": "premium_unreadable",
+                          "detail": f"Premium blank or unreadable for {', '.join(sorted(unknown['line']))}. "
+                                    "Those lines count as having no premium."})
+        prem = prem_all_rows[prem_all_rows["earned_premium"].notna()]  # unknown premium covers nothing
         has_all = (prem["line"] == "ALL").any()
         prem_lines = set(prem.loc[prem["line"] != "ALL", "line"])
         missing = sorted(claim_lines.get(py, set()) - prem_lines) if not has_all else []
