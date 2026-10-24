@@ -2,6 +2,12 @@
 
 ## 2026-10-24 — marketplace 2.0.0
 
+### Fixed in review (PR #17)
+- Loss runs: blank claim numbers are no longer merged as one claim; a partial paid/outstanding split falls back to carrier incurred instead of counting unknowns as zero; duplicate premium rows for a year and line are summed; premium-only years and lines appear with zero losses; maturity no longer assumes a January 1 start; JSON now includes year-by-line totals and open claims; the Claims sheet exports schema columns only, so claimant names and notes never leave.
+- Retention replay: same blank-claim and partial-split rules as the loss-run script.
+- Charts: negative values are no longer clipped at zero.
+- README: upstream install section now adds this repository's marketplace.
+
 ### Added
 - `pc-risk-counsel` plugin 1.0.0
   - `analyzing-loss-runs`: normalized claims schema, `summarize_loss_runs.py` (totals by year and line, loss ratio, maturity, large losses, open claims, top causes, eight data-quality flags), narrative guide.

@@ -24,7 +24,7 @@ One row per claim. Header row required. Column order does not matter. Unknown co
 | cause | no | text | Short cause or claim type ("rear-end," "slip and fall," "strain - lifting") |
 | claim_type | no | text | WC: medical-only / indemnity. Others: BI / PD / other. |
 
-\* Supply the paid and outstanding split when the report shows it. If the report shows only a total, fill `carrier_incurred` and leave the four split columns blank. The script uses carrier_incurred when the split is missing.
+\* Supply the paid and outstanding split when the report shows it. `paid_loss` and `outstanding_loss` must both be filled for the split to count. If the report does not separate expense, put the totals in `paid_loss` and `outstanding_loss` and leave both expense columns blank. If the report shows only a total, fill `carrier_incurred` and leave the four split columns blank. The script uses carrier_incurred when the split is missing.
 
 Number formatting: strip `$` and commas. Parentheses mean negative: `(1,250)` → `-1250`. Blank means unknown, not zero.
 

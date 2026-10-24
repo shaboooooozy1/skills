@@ -50,11 +50,12 @@ python scripts/summarize_loss_runs.py claims.csv \
 
 - `--large-loss`: individual claim threshold for the large-loss list. Default 50,000. Use the user's number if given.
 - `--as-of`: the date used to judge stale valuations. Default today.
-- Writes `loss_summary.xlsx` (sheets: Summary_by_Year, Summary_by_Line, Large_Losses, Open_Claims, Data_Flags, Claims) and `loss_summary.json`.
+- Writes `loss_summary.xlsx` (sheets: Summary_by_Year, Summary_by_Year_Line, Summary_by_Line, Large_Losses, Open_Claims, Top_Causes, Data_Flags, Claims) and `loss_summary.json` with the same tables. Loss ratios appear wherever premium was supplied, and a premium-only year or line shows with zero losses.
+- The Claims sheet carries schema columns only. Any extra columns in claims.csv (claimant names, notes) are dropped from every output.
 
 ### 3. Read the flags
 
-The script flags: duplicate claim numbers, incurred that does not equal paid plus outstanding less recoveries, negative amounts, open claims with zero reserve, closed claims with reserves, loss dates outside the policy year, and valuations more than 90 days old. Fix anything caused by your own extraction and rerun. Report the rest to the user as questions for the carrier.
+The script flags: duplicate claim numbers, blank claim numbers, incomplete paid/outstanding splits, incurred that does not equal paid plus outstanding less recoveries, negative amounts, open claims with zero reserve, closed claims with reserves, loss dates outside the policy year, and valuations more than 90 days old. Fix anything caused by your own extraction and rerun. Report the rest to the user as questions for the carrier.
 
 ### 4. Narrative
 

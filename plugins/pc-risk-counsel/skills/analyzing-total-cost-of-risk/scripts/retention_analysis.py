@@ -58,10 +58,21 @@ def load(path, basis, notes):
     df["valuation_date"] = pd.to_datetime(df.get("valuation_date", ""), errors="coerce")
     df["line"] = df["line"].str.strip().str.upper()
     df["policy_year"] = pd.to_numeric(df["policy_year"], errors="coerce").astype("Int64")
-    # latest valuation per claim, one row per claim
-    df = (df.sort_values("valuation_date")
-            .drop_duplicates(subset=["carrier", "claim_number"], keep="last"))
-    has_split = df[SPLIT].notna().any(axis=1)
+    # latest valuation per claim; rows missing carrier or claim number are never merged together
+    df = df.sort_values("valuation_date")
+    no_id = df["claim_number"].str.strip().eq("") | df["carrier"].str.strip().eq("")
+    df = pd.concat([df[no_id], df[~no_id].drop_duplicates(subset=["carrier", "claim_number"], keep="last")])
+    if no_id.any():
+        notes.append(f"{int(no_id.sum())} row(s) lack a carrier or claim number and were kept as separate claims.")
+    # Same rule as summarize_loss_runs.py: the split is complete when paid_loss and outstanding_loss
+    # are both known. A partial split falls back to carrier_incurred when present.
+    any_split = df[SPLIT].notna().any(axis=1)
+    complete = df["paid_loss"].notna() & df["outstanding_loss"].notna()
+    partial = any_split & ~complete
+    has_split = complete | (partial & df["carrier_incurred"].isna())
+    if partial.any():
+        notes.append(f"{int(partial.sum())} claim(s) had an incomplete paid/outstanding split. Used carrier "
+                     "incurred where given; otherwise known amounts only (may understate).")
     rec = df["recoveries"].fillna(0)
     if basis == "loss_only":
         amt = df["paid_loss"].fillna(0) + df["outstanding_loss"].fillna(0) - rec

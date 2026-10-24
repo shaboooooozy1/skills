@@ -22,6 +22,10 @@ REQUIRED = ["carrier", "policy_year", "line", "claim_number", "loss_date", "stat
 SPLIT = ["paid_loss", "paid_expense", "outstanding_loss", "outstanding_expense"]
 MONEY = SPLIT + ["recoveries", "carrier_incurred"]
 STATUSES = {"open", "closed", "reopened"}
+SAFE_EXPORT = ["carrier", "policy_number", "policy_year", "policy_effective", "line", "claim_number",
+               "loss_date", "status", "claim_type", "cause", "paid_loss", "paid_expense",
+               "outstanding_loss", "outstanding_expense", "recoveries", "carrier_incurred",
+               "paid", "outstanding", "incurred", "incurred_source", "valuation_date"]
 MISMATCH_TOL_ABS = 1.0      # dollars
 MISMATCH_TOL_PCT = 0.005    # 0.5%
 
@@ -80,8 +84,9 @@ def flag(flags, row, kind, detail):
 def dedupe(df, flags):
     """Keep the latest valuation per (carrier, claim_number). Flag true duplicates."""
     df = df.sort_values("valuation_date")
-    keep = []
-    for _, g in df.groupby(["carrier", "claim_number"], sort=False):
+    no_id = df["claim_number"].str.strip().eq("") | df["carrier"].str.strip().eq("")
+    keep = list(df.index[no_id])  # rows without a full key are kept as-is and flagged later
+    for _, g in df[~no_id].groupby(["carrier", "claim_number"], sort=False):
         if len(g) == 1:
             keep.append(g.index[0])
             continue
@@ -100,7 +105,16 @@ def dedupe(df, flags):
 
 
 def compute_amounts(df, flags):
-    has_split = df[SPLIT].notna().any(axis=1)
+    """Use the paid/outstanding split only when it is complete.
+
+    Complete = paid_loss and outstanding_loss both present. Expense columns may be blank when the
+    report does not separate expense (schema.md). A partial split falls back to carrier_incurred;
+    with no carrier total it is computed from what is known and flagged as possibly understated.
+    """
+    any_split = df[SPLIT].notna().any(axis=1)
+    complete = df["paid_loss"].notna() & df["outstanding_loss"].notna()
+    partial = any_split & ~complete
+    has_split = complete | (partial & df["carrier_incurred"].isna())
     rec = df["recoveries"].fillna(0)
     df["paid"] = df["paid_loss"].fillna(0) + df["paid_expense"].fillna(0)
     df["outstanding"] = df["outstanding_loss"].fillna(0) + df["outstanding_expense"].fillna(0)
@@ -110,7 +124,15 @@ def compute_amounts(df, flags):
     df.loc[~has_split, ["paid", "outstanding"]] = float("nan")
 
     for i, r in df.iterrows():
-        if has_split[i] and pd.notna(r["carrier_incurred"]):
+        if partial[i]:
+            if has_split[i]:
+                flag(flags, r, "incomplete_split",
+                     "Paid or outstanding loss is blank and there is no carrier incurred. Total uses known "
+                     "amounts only and may be understated.")
+            else:
+                flag(flags, r, "incomplete_split",
+                     "Paid or outstanding loss is blank. Used carrier incurred instead of a partial total.")
+        if complete[i] and pd.notna(r["carrier_incurred"]):
             diff = abs(computed[i] - r["carrier_incurred"])
             if diff > max(MISMATCH_TOL_ABS, MISMATCH_TOL_PCT * abs(r["carrier_incurred"])):
                 flag(flags, r, "incurred_mismatch",
@@ -179,34 +201,52 @@ def summarize(df, group_cols, premium, large):
 
 
 def attach_premium(out, group_cols, premium):
+    """Sum premium per group (several policies or carriers can share a year and line), then
+    outer-join so a premium-only group (a zero-loss year or line) still appears with zero losses."""
     if group_cols == ["policy_year"]:
-        p = premium.groupby("policy_year")["earned_premium"].sum().reset_index()
-        out = out.merge(p, on="policy_year", how="left")
-    elif group_cols == ["policy_year", "line"]:
-        p = premium[premium["line"] != "ALL"]
-        out = out.merge(p[["policy_year", "line", "earned_premium"]], on=group_cols, how="left")
+        p = premium.groupby("policy_year", as_index=False)["earned_premium"].sum(min_count=1)
+    elif group_cols in (["policy_year", "line"], ["line"]):
+        p = (premium[premium["line"] != "ALL"]
+             .groupby(group_cols, as_index=False)["earned_premium"].sum(min_count=1))
     else:
         return out
+    out = out.merge(p, on=group_cols, how="outer")
+    for c in ["claims", "open_claims", "incurred", "claims_over_large_loss"]:
+        out[c] = out[c].fillna(0)
+    for c in ["claims", "open_claims", "claims_over_large_loss"]:
+        out[c] = out[c].astype(int)
+    zero = out["claims"] == 0
+    out.loc[zero, ["paid", "outstanding"]] = 0.0
+    out = out.sort_values(group_cols).reset_index(drop=True)
     out["loss_ratio"] = out["incurred"] / out["earned_premium"]
     out.loc[out["earned_premium"].isna() | (out["earned_premium"] == 0), "loss_ratio"] = float("nan")
     return out
 
 
 def add_maturity(by_year, df):
+    """Months from term start to latest valuation. Without a policy_effective date, assume the
+    latest possible start (Dec 1 of the policy year) so maturity is never overstated. Unknown
+    maturity counts as immature."""
     starts = df.groupby("policy_year")["policy_effective"].min()
-    rows = []
+    months_col, basis_col = [], []
     for _, r in by_year.iterrows():
         py = r["policy_year"]
-        start = starts.get(py)
+        start = starts.get(py) if pd.notna(py) else pd.NaT
+        basis = "policy_effective"
         if pd.isna(start):
-            start = pd.Timestamp(int(py), 1, 1) if pd.notna(py) else pd.NaT
+            start = pd.Timestamp(int(py), 12, 1) if pd.notna(py) else pd.NaT
+            basis = "assumed Dec 1 start (no policy_effective)"
         val = pd.Timestamp(r["latest_valuation"]) if pd.notna(r["latest_valuation"]) else pd.NaT
         months = None
         if pd.notna(start) and pd.notna(val):
             months = (val.year - start.year) * 12 + (val.month - start.month)
-        rows.append(months)
-    by_year["maturity_months"] = rows
-    by_year["immature"] = by_year["maturity_months"].map(lambda m: bool(m is not None and m < 24))
+        else:
+            basis = "unknown (no valuation date)"
+        months_col.append(months)
+        basis_col.append(basis)
+    by_year["maturity_months"] = months_col
+    by_year["maturity_basis"] = basis_col
+    by_year["immature"] = by_year["maturity_months"].map(lambda m: bool(m is None or m < 24))
     return by_year
 
 
@@ -264,7 +304,7 @@ def main():
 
     by_year = add_maturity(summarize(df, ["policy_year"], premium, a.large_loss), df)
     by_year_line = summarize(df, ["policy_year", "line"], premium, a.large_loss)
-    by_line = summarize(df, ["line"], None, a.large_loss)
+    by_line = summarize(df, ["line"], premium, a.large_loss)
 
     total_inc = df["incurred"].sum()
     cols = ["carrier", "policy_year", "line", "claim_number", "loss_date", "status", "cause",
@@ -277,7 +317,8 @@ def main():
                 .sort_values(["claims", "incurred"], ascending=False).head(10).reset_index())
     flags_df = pd.DataFrame(flags, columns=["row", "carrier", "claim_number", "flag", "detail"])
 
-    claims_out = df.drop(columns=["_row"]).copy()
+    # Export only schema columns. Extra carrier-report columns (claimant names, notes) never leave.
+    claims_out = df[[c for c in SAFE_EXPORT if c in df.columns]].copy()
     for c in ["loss_date", "valuation_date", "policy_effective"]:
         claims_out[c] = claims_out[c].dt.date
     for frame in (large, open_claims):
@@ -321,6 +362,8 @@ def main():
         "totals": totals,
         "by_year": records(by_year),
         "by_line": records(by_line),
+        "by_year_line": records(by_year_line),
+        "open_claims": records(open_claims),
         "large_losses": records(large),
         "top_causes": records(causes),
         "flag_counts": flags_df["flag"].value_counts().to_dict(),

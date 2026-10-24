@@ -26,12 +26,12 @@ SIZES = {"wide": (10, 5.625), "square": (7, 7)}  # 16:9 slide and 1:1
 
 def fmt_value(v, kind):
     if kind == "currency":
-        a = abs(v)
+        a, sign = abs(v), "-" if v < 0 else ""
         if a >= 1_000_000:
-            return f"${v / 1_000_000:,.1f}M"
+            return f"{sign}${a / 1_000_000:,.1f}M"
         if a >= 10_000:
-            return f"${v / 1_000:,.0f}K"
-        return f"${v:,.0f}"
+            return f"{sign}${a / 1_000:,.0f}K"
+        return f"{sign}${a:,.0f}"
     if kind == "percent":
         return f"{v * 100:.0f}%"
     return f"{v:,.0f}" if abs(v) >= 100 else f"{v:,.2f}".rstrip("0").rstrip(".")
@@ -112,8 +112,8 @@ def main():
             bars = ax.bar(offs, series[name], width * 0.92, color=PALETTE[i % len(PALETTE)], label=name)
             if a.labels:
                 for b, v in zip(bars, series[name]):
-                    ax.text(b.get_x() + b.get_width() / 2, b.get_height(), fmt_value(v, a.format),
-                            ha="center", va="bottom", fontsize=10, color=INK)
+                    ax.text(b.get_x() + b.get_width() / 2, v, fmt_value(v, a.format),
+                            ha="center", va="bottom" if v >= 0 else "top", fontsize=10, color=INK)
 
     if a.benchmark is not None:
         ax.axhline(a.benchmark, color=MUTED, linestyle="--", linewidth=1.3)
@@ -125,7 +125,9 @@ def main():
     ax.set_xticklabels(cats)
     ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: fmt_value(v, a.format)))
     lo, hi = ax.get_ylim()
-    ax.set_ylim(0 if a.type != "line" else lo, hi * 1.08 if a.labels else hi)
+    has_negative = any(v < 0 for vals in series.values() for v in vals)
+    bottom = lo if (a.type == "line" or has_negative) else 0
+    ax.set_ylim(bottom, hi * 1.08 if (a.labels and hi > 0) else hi)
     ax.grid(axis="y", color=GRID, linewidth=1)
     ax.set_axisbelow(True)
     for s in ("top", "right", "left"):

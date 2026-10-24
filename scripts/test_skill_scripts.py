@@ -63,6 +63,46 @@ with tempfile.TemporaryDirectory() as tmp:
          "--benchmark", "0.6", "--benchmark-label", "Target 60%", "--labels", "--out", "c"], tmp)
     check((Path(tmp) / "c.png").stat().st_size > 10_000, "chart PNG missing or empty")
 
+    # Edge cases from PR #17 review: blank claim numbers, partial splits, extra PII columns,
+    # duplicate premium rows, premium-only years, missing effective dates.
+    tp = Path(tmp)
+    (tp / "edge.csv").write_text(
+        "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,"
+        "carrier_incurred,valuation_date,cause,claimant_name\n"
+        "Test Co,2024,GL,,2024-03-01,closed,1000,0,,2026-09-30,UNREADABLE,Jane Roe\n"
+        "Test Co,2024,GL,,2024-05-01,closed,2000,0,,2026-09-30,UNREADABLE,John Doe\n"
+        "Test Co,2024,GL,C-3,2024-06-01,open,5000,,12000,2026-09-30,slip,Pat Poe\n"
+        "Test Co,2024,GL,C-4,2024-07-01,open,,3000,,2026-09-30,slip,Sam Soe\n")
+    (tp / "edge_prem.csv").write_text(
+        "policy_year,line,earned_premium\n2024,GL,10000\n2024,GL,15000\n2025,GL,20000\n")
+    run([LR, "edge.csv", "--premium", "edge_prem.csv", "--as-of", "2026-10-24", "--out", "edge"], tmp)
+    e = json.loads((tp / "edge.json").read_text())
+    check(e["totals"]["claims"] == 4, f"blank claim numbers merged: {e['totals']['claims']} claims, want 4")
+    check(round(e["totals"]["incurred"]) == 1000 + 2000 + 12000 + 3000,
+          f"partial split handling wrong: incurred {e['totals']['incurred']}, want 18000")
+    check(e["flag_counts"].get("incomplete_split") == 2, f"incomplete_split flags {e['flag_counts']}")
+    years = {y["policy_year"]: y for y in e["by_year"]}
+    check(2025 in years and years[2025]["claims"] == 0, "premium-only year 2025 missing from by_year")
+    yl = [r for r in e["by_year_line"] if r["policy_year"] == 2024 and r["line"] == "GL"]
+    check(len(yl) == 1 and round(yl[0]["earned_premium"]) == 25000,
+          f"duplicate premium rows not summed: {yl}")
+    check(abs(yl[0]["loss_ratio"] - 18000 / 25000) < 1e-9 if yl else False, "2024 GL loss ratio wrong")
+    check("open_claims" in e and len(e["open_claims"]) == 2, "open_claims missing from JSON")
+    check(years[2024]["immature"] is True and "Dec 1" in years[2024]["maturity_basis"],
+          f"maturity fallback should be conservative: {years[2024]}")
+    import openpyxl
+    hdr = [c.value for c in openpyxl.load_workbook(tp / "edge.xlsx")["Claims"][1]]
+    check("claimant_name" not in hdr, "claimant_name leaked into Claims sheet")
+
+    run([RET, "edge.csv", "--retentions", "10000", "--out", "edge_ret"], tmp)
+    er = json.loads((tp / "edge_ret.json").read_text())
+    check(round(er["summary"][0]["total_retained"]) == 1000 + 2000 + 10000 + 3000,
+          f"retention replay partial/blank handling wrong: {er['summary'][0]['total_retained']}")
+
+    (tp / "neg.csv").write_text("Item,Change\nA,500\nB,-300\nC,200\n")
+    run([CHART, "neg.csv", "--title", "Credits shown", "--out", "neg"], tmp)
+    check((tp / "neg.png").exists(), "negative-value chart failed")
+
 if failures:
     print("FAILED")
     for f in failures:
