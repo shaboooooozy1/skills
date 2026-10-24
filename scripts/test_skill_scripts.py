@@ -504,6 +504,39 @@ with tempfile.TemporaryDirectory() as tmp:
     check(r.returncode != 0 and "symlink" in r.stderr and not (pz / "dist/s.zip").exists(),
           f"symlinked plugin LICENSE packaged: {r.stderr[-200:]}")
 
+    # Codex round on 351f0af.
+    (tp / "tc_null.json").write_text(json.dumps({"periods": [{"label": "P", "premiums": 1000, "source": None}]}))
+    run([TCOR, "tc_null.json", "--out", "tc_null"], tmp)
+    tn = json.loads((tp / "tc_null.json").read_text())["periods"][0]
+    check("No source" in str(tn.get("open_items")), f"null source treated as sourced: {tn}")
+    (tp / "nomt.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,"
+        "carrier_incurred,valuation_date\nT,2024,GL,N1,2024-03-01,open,,,,2026-09-30\n"
+        "T,2024,GL,N2,2024-03-01,closed,,,900,2026-09-30\n")
+    run([LR, "nomt.csv", "--as-of", "2026-10-24", "--out", "nomt"], tmp)
+    note = json.loads((tp / "nomt.json").read_text())["totals"]["paid_outstanding_note"] or ""
+    check("understated" in note and "complete" not in note.replace("incomplete", ""),
+          f"missing amounts described as complete incurred: {note}")
+    (tp / "noyr.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\nT,,GL,Y1,2024-03-01,closed,100,0,2026-09-30\n")
+    (tp / "noyr_p.csv").write_text("policy_year,line,earned_premium\nabc,GL,1000\n")
+    run([LR, "noyr.csv", "--premium", "noyr_p.csv", "--as-of", "2026-10-24", "--out", "noyr"], tmp)
+    check((tp / "noyr.json").exists(), "report with no readable policy year crashed")
+    (tp / "dup.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,Paid_Loss ,"
+        "outstanding_loss,valuation_date\nT,2024,GL,D1,2024-03-01,closed,100,5000,0,2026-09-30\n")
+    check(fails([LR, "dup.csv"], "more than once"), "duplicate paid_loss column silently dropped")
+    check(fails([RET, "dup.csv", "--retentions", "1000"], "more than once"), "replay accepted duplicate column")
+    (tp / "eff.csv").write_text("carrier,policy_year,policy_effective,line,claim_number,loss_date,status,paid_loss,"
+        "outstanding_loss,valuation_date\nT,2024,2024-13-45,WCC,F1,2024-03-01,closed,100,0,2026-09-30\n")
+    run([LR, "eff.csv", "--as-of", "2026-10-24", "--out", "eff"], tmp)
+    ef = json.loads((tp / "eff.json").read_text())["flag_counts"]
+    check(ef.get("unreadable_date") == 1, f"unreadable policy_effective not flagged: {ef}")
+    check(ef.get("unknown_line") == 1, f"line typo WCC not flagged: {ef}")
+    (tp / "scn.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,"
+        "carrier_incurred,valuation_date\nT,2024,WC,W9,2024-03-01,open,,,,\n"
+        "T,2024,AL,A9,2024-03-01,closed,500,0,,2026-09-30\n")
+    run([RET, "scn.csv", "--retentions", "1000", "--lines", "AL", "--immature-years", "none", "--out", "scn"], tmp)
+    sn = " ".join(json.loads((tp / "scn.json").read_text())["notes"])
+    check("W9" not in sn, f"AL-only replay carries notes about an excluded WC claim: {sn}")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"

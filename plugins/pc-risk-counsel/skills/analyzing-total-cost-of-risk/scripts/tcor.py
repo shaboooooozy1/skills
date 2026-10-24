@@ -116,7 +116,7 @@ def compute_period(p, i):
     if row["exposure"] is not None and row["exposure"] <= 0:
         sys.exit(f"{label}.exposure must be positive. Leave it out if it is unknown.")
     row["notes"] = p.get("notes", "")
-    row["source"] = p.get("source", "")
+    row["source"] = "" if p.get("source") is None else p.get("source")  # JSON null = no source
     if not str(row["source"]).strip():
         open_items.append("No source given for this period's figures")
         row["open_items"] = "; ".join(open_items)

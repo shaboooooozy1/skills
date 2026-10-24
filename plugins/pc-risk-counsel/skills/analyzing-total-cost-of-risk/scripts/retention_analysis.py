@@ -16,6 +16,7 @@ Usage:
       --immature-years 2024,2025|none [--out retention]
 """
 import argparse
+import csv
 import json
 import math
 import re
@@ -25,6 +26,18 @@ import pandas as pd
 from openpyxl.styles import Font
 
 SPLIT = ["paid_loss", "paid_expense", "outstanding_loss", "outstanding_expense"]
+
+
+def read_table(path):
+    """Read a CSV as text, stopping on repeated headers. pandas would rename a second
+    'paid_loss' to 'paid_loss.1' and quietly ignore it."""
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        header = next(csv.reader(f), [])
+    norm = [h.strip().lower() for h in header]
+    dupes = sorted({h for h in norm if h and norm.count(h) > 1})
+    if dupes:
+        sys.exit(f"{path}: column(s) {', '.join(dupes)} appear more than once. Keep one of each.")
+    return pd.read_csv(path, dtype=str, keep_default_na=False, encoding="utf-8-sig")
 
 
 def to_number(v):
@@ -95,8 +108,9 @@ def money_list(s, name):
     return vals
 
 
-def load(path, basis, notes):
-    df = pd.read_csv(path, dtype=str, keep_default_na=False)
+def load(path):
+    """Parse and dedupe. Diagnostics are written later by amounts(), on the claims in scope only."""
+    df = read_table(path)
     df.columns = [c.strip().lower() for c in df.columns]
     for c in ["carrier", "claim_number", "policy_year", "line"]:
         if c not in df.columns:
@@ -125,29 +139,39 @@ def load(path, basis, notes):
     keyed = df[~no_id]
     undated_dups = keyed[keyed["valuation_date"].isna()
                          & keyed.duplicated(subset=["carrier", "claim_number"], keep=False)]
-    ambiguous = (undated_dups.groupby(["carrier", "claim_number"]).size().index
-                 .difference(keyed[keyed["valuation_date"].notna()].set_index(["carrier", "claim_number"]).index))
-    if len(ambiguous):
-        notes.append(f"{len(ambiguous)} claim(s) appear more than once with no readable valuation date "
-                     f"({', '.join(c for _, c in ambiguous)}). Kept one row each without knowing which is "
-                     "current. Confirm against the carrier reports.")
+    ambiguous = set(undated_dups.groupby(["carrier", "claim_number"]).size().index
+                    .difference(keyed[keyed["valuation_date"].notna()].set_index(["carrier", "claim_number"]).index))
     dated = keyed[keyed["valuation_date"].notna()]
     latest = dated[dated["valuation_date"] == dated.groupby(["carrier", "claim_number"])["valuation_date"].transform("max")]
-    tied = latest[latest.duplicated(subset=["carrier", "claim_number"], keep=False)]
-    if len(tied):
-        names = sorted(set(tied["claim_number"]))
-        notes.append(f"{len(names)} claim(s) have two rows with the same latest valuation date "
-                     f"({', '.join(names)}). Kept one without knowing which is right. Confirm with the carrier.")
-    df = pd.concat([df[no_id], keyed.drop_duplicates(subset=["carrier", "claim_number"], keep="last")])
-    amb = {(c, n) for c, n in ambiguous}
-    undated = [n or "(no claim number)"
-               for c, n, d in zip(df["carrier"], df["claim_number"], df["valuation_date"])
-               if pd.isna(d) and (c, n) not in amb]  # ambiguous duplicates already have their own note
+    tied = set(zip(*[latest.loc[latest.duplicated(subset=["carrier", "claim_number"], keep=False), c]
+                     for c in ("carrier", "claim_number")]))
+    df = pd.concat([df[no_id].assign(_no_id=True),
+                    keyed.drop_duplicates(subset=["carrier", "claim_number"], keep="last").assign(_no_id=False)])
+    keys = list(zip(df["carrier"], df["claim_number"]))
+    df["_ambiguous"] = [k in ambiguous for k in keys]
+    df["_tied"] = [k in tied for k in keys]
+    return df
+
+
+def amounts(df, basis, notes):
+    """Notes and claim amounts for the claims that will be replayed (after dedupe and scope)."""
+    df = df.copy()
+    amb = df[df["_ambiguous"]]
+    if len(amb):
+        notes.append(f"{len(amb)} claim(s) appear more than once with no readable valuation date "
+                     f"({', '.join(amb['claim_number'])}). Kept one row each without knowing which is "
+                     "current. Confirm against the carrier reports.")
+    tied = sorted(set(df.loc[df["_tied"], "claim_number"]))
+    if tied:
+        notes.append(f"{len(tied)} claim(s) have two rows with the same latest valuation date "
+                     f"({', '.join(tied)}). Kept one without knowing which is right. Confirm with the carrier.")
+    undated = [n or "(no claim number)" for n in
+               df.loc[df["valuation_date"].isna() & ~df["_ambiguous"], "claim_number"]]  # ambiguous: own note
     if undated:
         notes.append(f"{len(undated)} claim(s) have no readable valuation date ({', '.join(undated)}). "
                      "Their amounts may be older than the rest of the data. Confirm the valuation with the carrier.")
-    if no_id.any():
-        notes.append(f"{int(no_id.sum())} row(s) lack a carrier or claim number and were kept as separate claims.")
+    if df["_no_id"].any():
+        notes.append(f"{int(df['_no_id'].sum())} row(s) lack a carrier or claim number and were kept as separate claims.")
     # Same rule as summarize_loss_runs.py: the split is complete when paid_loss and outstanding_loss
     # are both known. A partial split falls back to carrier_incurred when present.
     any_split = df[SPLIT].notna().any(axis=1)
@@ -233,7 +257,7 @@ def main():
         notes.append("No --immature-years given, so the mature-years average is withheld. Recent years are "
                      "still developing. Rerun with --immature-years (or 'none' if every year is mature).")
 
-    df = load(a.claims, a.basis, notes)
+    df = load(a.claims)
     # Year range comes from the whole file (or --years), before the line filter, so a year
     # with no claims in the selected lines still counts as a zero-retained year.
     if a.years:
@@ -258,6 +282,7 @@ def main():
     if len(bad):
         sys.exit("Fix these amounts before replaying (run summarize_loss_runs.py to see every data flag): "
                  + ", ".join(f"{n or '(no claim number)'} ({b.strip()})" for n, b in zip(bad["claim_number"], bad["_bad"])))
+    df = amounts(df, a.basis, notes)  # diagnostics cover only the claims in scope
     stray = sorted(immature - set(years))
     if stray:
         sys.exit(f"--immature-years {', '.join(map(str, stray))} not in the replay years "

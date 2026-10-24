@@ -10,6 +10,7 @@ Usage:
                                 [--as-of YYYY-MM-DD] [--stale-days 90] [--out loss_summary]
 """
 import argparse
+import csv
 import json
 import math
 import re
@@ -23,12 +24,25 @@ REQUIRED = ["carrier", "policy_year", "line", "claim_number", "loss_date", "stat
 SPLIT = ["paid_loss", "paid_expense", "outstanding_loss", "outstanding_expense"]
 MONEY = SPLIT + ["recoveries", "carrier_incurred"]
 STATUSES = {"open", "closed", "reopened"}
+LINE_CODES = {"WC", "GL", "AL", "APD", "PROP", "UMB", "PL", "EPL", "DO", "CYB", "CARGO", "IM", "OTHER"}  # schema.md
 SAFE_EXPORT = ["carrier", "policy_number", "policy_year", "policy_effective", "line", "claim_number",
                "loss_date", "status", "claim_type", "cause", "paid_loss", "paid_expense",
                "outstanding_loss", "outstanding_expense", "recoveries", "carrier_incurred",
                "paid", "outstanding", "incurred", "incurred_source", "valuation_date"]
 MISMATCH_TOL_ABS = 1.0      # dollars
 MISMATCH_TOL_PCT = 0.005    # 0.5%
+
+
+def read_table(path):
+    """Read a CSV as text, stopping on repeated headers. pandas would rename a second
+    'paid_loss' to 'paid_loss.1' and quietly ignore it."""
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        header = next(csv.reader(f), [])
+    norm = [h.strip().lower() for h in header]
+    dupes = sorted({h for h in norm if h and norm.count(h) > 1})
+    if dupes:
+        sys.exit(f"{path}: column(s) {', '.join(dupes)} appear more than once. Keep one of each.")
+    return pd.read_csv(path, dtype=str, keep_default_na=False, encoding="utf-8-sig")
 
 
 def to_number(v):
@@ -68,7 +82,7 @@ def to_number(v):
 
 
 def load_claims(path):
-    df = pd.read_csv(path, dtype=str, keep_default_na=False)
+    df = read_table(path)
     df.columns = [c.strip().lower() for c in df.columns]
     missing = [c for c in REQUIRED if c not in df.columns]
     if missing:
@@ -93,8 +107,10 @@ def load_claims(path):
     df["status"] = df["status"].str.lower()
     py = pd.to_numeric(df["policy_year"], errors="coerce")
     df["policy_year"] = py.where(py.notna() & (py % 1 == 0)).astype("Int64")  # 2024.5 counts as unreadable
+    eff_raw = df["policy_effective"].astype(str).str.strip()
     for c in ["loss_date", "valuation_date", "policy_effective"]:
         df[c] = pd.to_datetime(df[c].replace("", None), errors="coerce")
+    df["_bad_effective"] = eff_raw.ne("") & df["policy_effective"].isna()  # supplied but unreadable
     return df
 
 
@@ -160,6 +176,7 @@ def compute_amounts(df, flags):
     computed = df["paid"] + df["outstanding"] - rec
     df["incurred"] = computed.where(has_split, df["carrier_incurred"])
     df["incurred_source"] = has_split.map({True: "computed", False: "carrier"})
+    df.loc[partial & has_split, "incurred_source"] = "computed_partial"  # known parts only, may understate
     # When incurred comes from the carrier total, keep whatever paid or reserve parts the report
     # did show (open-exposure totals need them); a part with nothing known stays unknown.
     known_paid = df[["paid_loss", "paid_expense"]].sum(axis=1, min_count=1)
@@ -185,7 +202,24 @@ def compute_amounts(df, flags):
         if pd.isna(df.at[i, "incurred"]):
             flag(flags, r, "missing_amounts", "No paid/outstanding split and no carrier incurred. Counted as 0.")
             df.at[i, "incurred"] = 0.0
+            df.at[i, "incurred_source"] = "missing"
     return df
+
+
+def incurred_note(df):
+    """Say plainly whether incurred is complete. Claims with no amount count as 0 and partial splits
+    use known parts only, so either one makes the incurred total a floor, not a full figure."""
+    parts = []
+    if not df[["paid", "outstanding"]].notna().all().all():
+        parts.append("Some claims show only a carrier incurred total, so paid and outstanding totals are unknown.")
+    n_missing = int((df["incurred_source"] == "missing").sum())
+    n_partial = int((df["incurred_source"] == "computed_partial").sum())
+    if n_missing or n_partial:
+        parts.append(f"Incurred is understated: {n_missing} claim(s) have no known amount (counted as 0) and "
+                     f"{n_partial} use known parts of an incomplete split.")
+    elif parts:
+        parts.append("Incurred is complete.")
+    return " ".join(parts) or None
 
 
 def check_rows(df, flags):
@@ -193,6 +227,12 @@ def check_rows(df, flags):
         for c in REQUIRED:
             if pd.isna(r[c]) or str(r[c]).strip() in {"", "NaT", "<NA>"}:
                 flag(flags, r, "missing_field", f"{c} is blank or unreadable.")
+        if r["line"] and r["line"] not in LINE_CODES:
+            flag(flags, r, "unknown_line", f"Line '{r['line']}' is not a schema code. Fix the typo, or use OTHER "
+                 "and put the carrier's label in cause.")
+        if r.get("_bad_effective"):
+            flag(flags, r, "unreadable_date", "policy_effective is unreadable. Maturity assumes a Dec 1 start and "
+                 "the policy-term check is skipped. Confirm the date.")
         if r["status"] and r["status"] not in STATUSES:
             flag(flags, r, "bad_status", f"Status '{r['status']}' is not open, closed, or reopened.")
         for c in MONEY:
@@ -300,7 +340,7 @@ def year_premium(df, premium, flags):
         # claim-free line or an ALL row, so the year stays unrated.
         rows.append({"policy_year": py, "earned_premium": total,
                      "premium_complete": not missing and len(unknown_rows) == 0})
-    out = pd.DataFrame(rows)
+    out = pd.DataFrame(rows, columns=["policy_year", "earned_premium", "premium_complete"])  # may be empty
     out["policy_year"] = out["policy_year"].astype("Int64")
     return out
 
@@ -463,7 +503,7 @@ def main():
 
     premium = None
     if a.premium:
-        premium = pd.read_csv(a.premium, dtype=str, keep_default_na=False)
+        premium = read_table(a.premium)
         premium.columns = [c.strip().lower() for c in premium.columns]
         for c in ["policy_year", "line", "earned_premium"]:
             if c not in premium.columns:
@@ -485,7 +525,7 @@ def main():
                           "detail": "Premium rows with a blank line code were left out of every total and ratio. "
                                     "Give each a line code or ALL."})
             premium = premium[premium["line"] != ""].copy()
-        premium["earned_premium"] = premium["earned_premium"].map(to_number)
+        premium["earned_premium"] = premium["earned_premium"].map(to_number).astype(float)  # float even if empty
         # A blank basis means earned (the default), also in a file where other rows say written.
         raw_basis = premium["premium_basis"] if "premium_basis" in premium else pd.Series([""] * len(premium))
         bases = set(raw_basis.str.strip().str.lower().replace("", "earned"))
@@ -524,9 +564,7 @@ def main():
         "open_claims": int(df["status"].isin(["open", "reopened"]).sum()),
         "paid": float(df["paid"].sum()) if df["paid"].notna().all() else None,
         "outstanding": float(df["outstanding"].sum()) if df["outstanding"].notna().all() else None,
-        "paid_outstanding_note": (None if df[["paid", "outstanding"]].notna().all().all() else
-                                  "Some claims show only a carrier incurred total, so paid and outstanding "
-                                  "totals are unknown. Incurred is complete."),
+        "paid_outstanding_note": incurred_note(df),
         "incurred": float(total_inc),
         "large_loss_threshold": a.large_loss,
         "claims_over_threshold": int(len(large)),
