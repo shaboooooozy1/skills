@@ -64,6 +64,9 @@ def compute_period(p, i):
         for k, v in items.items():
             detail.append({"label": label, "component": LABELS[comp], "item": k, "amount": v})
     col = p.get("collateral") or {}
+    if col:
+        open_items += [f"{LABELS['collateral_cost']}: {k} blank (counted as 0)"
+                       for k in ("amount", "cost_rate") if col.get(k) in (None, "")]
     amount = num(col.get("amount"), f"{label}.collateral.amount")
     rate = num(col.get("cost_rate"), f"{label}.collateral.cost_rate")
     fees = num(col.get("fees"), f"{label}.collateral.fees")
@@ -108,6 +111,9 @@ def main():
     base = cfg.get("exposure_base", {})
     base_name = base.get("name", "exposure")
     per = num(base.get("per", 1000), "exposure_base.per")
+    if per <= 0:
+        sys.exit("exposure_base.per must be a positive number, e.g. 1000 for per $1,000 or 1 for per unit.")
+    money_base = base_name.lower() in {"revenue", "payroll", "sales", "receipts", "tiv", "property values"}
 
     rows, detail = [], []
     for i, p in enumerate(periods):
@@ -137,7 +143,14 @@ def main():
             for col in ws.columns:
                 h = str(col[0].value or "")
                 ws.column_dimensions[col[0].column_letter].width = min(max(len(h) + 2, 12), 40)
-                fmt = "0.0%" if ("share" in h or "pct" in h) else ('$#,##0.00' if "per " in h else '$#,##0;($#,##0)')
+                if "share" in h or "pct" in h:
+                    fmt = "0.0%"
+                elif "per " in h:
+                    fmt = '$#,##0.00'
+                elif h == "exposure" and not money_base:
+                    fmt = '#,##0'  # headcount, vehicles and other counts are not dollars
+                else:
+                    fmt = '$#,##0;($#,##0)'
                 if h not in {"label", "kind", "notes", "source", "component", "item", "open_items"}:
                     for c in col[1:]:
                         c.number_format = fmt

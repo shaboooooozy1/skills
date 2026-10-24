@@ -9,7 +9,7 @@ The reader is the producer, then the client's CFO or an underwriter. They want t
 2. **The record.** Two or three sentences: years covered, carriers, claim count, total incurred, loss ratio if premium was given, valuation dates.
 3. **Trend.** Frequency (claim counts) and severity (average incurred) by year. Say which is moving. Flag immature years (under 24 months) every time you cite them.
 4. **Drivers.** Large losses, top causes, and the line that concentrates the dollars. Name causes, never claimants.
-5. **Open exposure.** Open claim count and outstanding reserves. Note any open claim with zero reserve.
+5. **Open exposure.** Open claim count and outstanding reserves. Note any open claim with zero reserve. If the script reports outstanding as unknown (some carriers gave only incurred totals), say so and list the open claims instead of quoting a reserve total.
 6. **Data questions for the carrier.** From Data_Flags. One line each. Omit if none.
 7. **What it means for the program.** Two to four bullets framed as questions to test, not conclusions. Examples:
    - "Frequency is low and stable. Test whether a higher deductible lowers total cost."

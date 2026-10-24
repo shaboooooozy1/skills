@@ -10,7 +10,8 @@
 - Charts: negative values are no longer clipped at zero; blank cells show as gaps, not zeros; stacked charts put negative parts below zero; duplicate column names are rejected.
 - Loss runs: year maturity uses the least mature policy in the year; reserve flags check any known reserve; zero-premium years are not counted as rated; premium rows with an unreadable year are flagged and excluded from totals.
 - Retention replay: options with the same retention but different aggregates stay separate; claims with no known amount and undated duplicates are named in the notes.
-- TCOR: missing premiums stop the run; any other component left out or blank is listed in `open_items`.
+- TCOR: missing premiums stop the run; any other component left out or blank is listed in `open_items`, including a blank collateral amount or rate; the exposure divisor must be positive; counts such as vehicles or headcount are no longer formatted as dollars.
+- Loss runs: paid, outstanding, and premium totals are reported as unknown (not a partial sum) when any part is unknown; written and mixed loss-ratio columns are formatted as percentages.
 - `m365-email-command-center` description narrowed to inbox-level work.
 - Security: workbook writers in all three risk scripts force any text starting with `=` to a plain string, so carrier-supplied text can never open as a live Excel formula. The text itself is kept exactly as printed.
 - Security: the `skill-zips` install artifact is uploaded only from pushes to `main`, never from pull request runs.

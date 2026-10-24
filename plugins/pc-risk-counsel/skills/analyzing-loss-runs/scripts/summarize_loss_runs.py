@@ -204,8 +204,10 @@ def summarize(df, group_cols, premium, large, ypremium=None):
     out = pd.DataFrame({
         "claims": g.size(),
         "open_claims": g["status"].apply(lambda s: int(s.isin(["open", "reopened"]).sum())),
-        "paid": g["paid"].sum(min_count=1),
-        "outstanding": g["outstanding"].sum(min_count=1),
+        # A group total is shown only when every claim's paid/outstanding is known. One carrier-total-only
+        # claim makes the group's paid and outstanding unknown (incurred stays complete).
+        "paid": g["paid"].agg(lambda s: s.sum() if s.notna().all() else float("nan")),
+        "outstanding": g["outstanding"].agg(lambda s: s.sum() if s.notna().all() else float("nan")),
         "incurred": g["incurred"].sum(),
         "avg_incurred_per_claim": g["incurred"].mean(),
         "largest_claim": g["incurred"].max(),
@@ -385,10 +387,11 @@ def write_xlsx(path, sheets):
                 ws.column_dimensions[col[0].column_letter].width = min(max(width, 10), 48)
                 if header in {"paid", "outstanding", "incurred", "avg_incurred_per_claim", "largest_claim",
                               "earned_premium", "paid_loss", "paid_expense", "outstanding_loss",
-                              "outstanding_expense", "recoveries", "carrier_incurred"}:
+                              "outstanding_expense", "recoveries", "carrier_incurred",
+                              "written_premium", "mixed_premium", "incurred_in_rated_years"}:
                     for c in col[1:]:
                         c.number_format = '$#,##0;($#,##0)'
-                elif header in {"loss_ratio", "share_of_total_incurred"}:
+                elif header.startswith("loss_ratio") or header == "share_of_total_incurred":
                     for c in col[1:]:
                         c.number_format = "0.0%"
 
@@ -461,8 +464,11 @@ def main():
     totals = {
         "claims": int(len(df)),
         "open_claims": int(df["status"].isin(["open", "reopened"]).sum()),
-        "paid": float(df["paid"].sum()),
-        "outstanding": float(df["outstanding"].sum()),
+        "paid": float(df["paid"].sum()) if df["paid"].notna().all() else None,
+        "outstanding": float(df["outstanding"].sum()) if df["outstanding"].notna().all() else None,
+        "paid_outstanding_note": (None if df[["paid", "outstanding"]].notna().all().all() else
+                                  "Some claims show only a carrier incurred total, so paid and outstanding "
+                                  "totals are unknown. Incurred is complete."),
         "incurred": float(total_inc),
         "large_loss_threshold": a.large_loss,
         "claims_over_threshold": int(len(large)),
@@ -476,7 +482,8 @@ def main():
         rated = by_year[by_year["loss_ratio"].notna()]
         ep, inc = float(rated["earned_premium"].sum()), float(rated["incurred"].sum())
         totals["premium_basis"] = basis
-        totals["earned_premium"] = float(premium["earned_premium"].sum())
+        totals["earned_premium"] = (float(premium["earned_premium"].sum())
+                                    if premium["earned_premium"].notna().all() else None)
         totals["loss_ratio"] = inc / ep if ep else None
         totals["loss_ratio_years"] = [int(y) for y in rated["policy_year"]]
         if basis != "earned":

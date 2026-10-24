@@ -252,6 +252,29 @@ with tempfile.TemporaryDirectory() as tmp:
     (tp / "stk.csv").write_text("Year,Premium,Credit\n2024,100,-40\n")
     run([CHART, "stk.csv", "--type", "stacked", "--title", "x", "--labels", "--out", "stk"], tmp)
 
+    # Codex round on 41a7ea9: partial totals, unknown premium total, formats, TCOR inputs.
+    check(t["paid"] is None and t["outstanding"] is None and t["paid_outstanding_note"],
+          f"paid/outstanding must be unknown with a carrier-total-only claim: {t}")
+    check(bp["totals"]["earned_premium"] is None, f"premium total must be unknown: {bp['totals']}")
+    cws = openpyxl.load_workbook(tp / "cov.xlsx")["Summary_by_Year"]
+    hdr = {c.value: c.column for c in cws[1]}
+    check(cws.cell(row=2, column=hdr["loss_ratio_written"]).number_format == "0.0%",
+          "renamed loss ratio not formatted as percent")
+    (tp / "tc_bad.json").write_text(json.dumps({"exposure_base": {"name": "vehicles", "per": 0},
+                                                "periods": [{"label": "z", "premiums": 1}]}))
+    r = subprocess.run([sys.executable, "-I", str(TCOR), "tc_bad.json"], cwd=tmp, capture_output=True, text=True)
+    check(r.returncode != 0 and "positive" in r.stderr, "non-positive exposure divisor not rejected")
+    (tp / "tc_col_in.json").write_text(json.dumps({"exposure_base": {"name": "vehicles", "per": 1},
+                                                   "periods": [{"label": "z", "premiums": 100, "exposure": 25,
+                                                                "collateral": {"amount": 50000, "cost_rate": ""}}]}))
+    run([TCOR, "tc_col_in.json", "--out", "tc_col"], tmp)
+    col_items = json.loads((tp / "tc_col.json").read_text())["periods"][0]["open_items"]
+    check("cost_rate blank" in col_items, f"blank collateral rate not an open item: {col_items!r}")
+    tws = openpyxl.load_workbook(tp / "tc_col.xlsx")["TCOR"]
+    th = {c.value: c.column for c in tws[1]}
+    check(not tws.cell(row=2, column=th["exposure"]).number_format.startswith("$"),
+          "vehicle count formatted as currency")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"
