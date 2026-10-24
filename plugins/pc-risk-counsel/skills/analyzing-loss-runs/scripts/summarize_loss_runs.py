@@ -39,9 +39,25 @@ def to_number(v):
     if s == "" or s.lower() in {"n/a", "na", "-", "--"}:
         return float("nan")
     neg = s.startswith("(") and s.endswith(")")
-    s = re.sub(r"[,$()\s]", "", s)
+    if neg:
+        s = s[1:-1].strip()
+    sign = ""
+    if s[:1] in ("+", "-"):
+        sign, s = s[0], s[1:].lstrip()
+    if s.startswith("$"):
+        s = s[1:].strip()
+        if not sign and s[:1] in ("+", "-"):
+            sign, s = s[0], s[1:]
+    # Validate the whole format before dropping separators: "12,34" or "1(2)" is an OCR or typing
+    # error, not 1234 or 12, so it stays unreadable and gets flagged.
+    if re.search(r"[()$\s]", s):
+        return float("nan")
+    if "," in s:
+        if not re.fullmatch(r"\d{1,3}(,\d{3})+(\.\d+)?", s):
+            return float("nan")
+        s = s.replace(",", "")
     try:
-        n = float(s)
+        n = float(sign + s)
     except ValueError:
         return float("nan")
     if not math.isfinite(n):
@@ -73,7 +89,8 @@ def load_claims(path):
         df[c] = df[c].astype(str).str.strip()
     df["line"] = df["line"].str.upper()
     df["status"] = df["status"].str.lower()
-    df["policy_year"] = pd.to_numeric(df["policy_year"], errors="coerce").astype("Int64")
+    py = pd.to_numeric(df["policy_year"], errors="coerce")
+    df["policy_year"] = py.where(py.notna() & (py % 1 == 0)).astype("Int64")  # 2024.5 counts as unreadable
     for c in ["loss_date", "valuation_date", "policy_effective"]:
         df[c] = pd.to_datetime(df[c].replace("", None), errors="coerce")
     return df

@@ -410,6 +410,32 @@ with tempfile.TemporaryDirectory() as tmp:
                        capture_output=True, text=True)
     check(r.returncode != 0 and "symlinks are not allowed" in r.stdout, f"upstream symlink accepted: {r.stdout[-300:]}")
 
+    # Codex round on 2d0df70.
+    (tp / "frac.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
+        "T,2024.5,GL,G1,2024-03-01,closed,100,0,2026-09-30\nT,2024,GL,G2,2024-03-01,closed,200,0,2026-09-30\n")
+    run([LR, "frac.csv", "--as-of", "2026-10-24", "--out", "frac"], tmp)
+    check((tp / "frac.json").exists(), "fractional policy year crashed the loss-run script")
+    run([RET, "frac.csv", "--retentions", "1000", "--immature-years", "none", "--out", "frac_ret"], tmp)
+    check((tp / "frac_ret.json").exists(), "fractional policy year crashed the replay")
+    (tp / "sep.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
+        'T,2024,GL,G1,2024-03-01,closed,"12,34",0,2026-09-30\nT,2024,GL,G2,2024-03-01,closed,1(2),0,2026-09-30\n'
+        'T,2024,GL,G3,2024-03-01,closed,"$1,250.50",(0),2026-09-30\nT,2024,GL,G4,2024-03-01,closed,"($1,000)",0,2026-09-30\n')
+    run([LR, "sep.csv", "--as-of", "2026-10-24", "--out", "sep"], tmp)
+    sp = json.loads((tp / "sep.json").read_text())
+    check(sp["flag_counts"].get("unreadable_amount") == 2, f"malformed separators not flagged: {sp['flag_counts']}")
+    check(fails([RET, "sep.csv", "--retentions", "1000"], "G1 (paid_loss)"), "replay accepted 12,34 as 1234")
+    (tp / "scope.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
+        "T,2024,WC,W1,2024-03-01,closed,abc,0,2026-09-30\n"
+        "T,2024,AL,A1,2024-03-01,closed,-5,0,2026-06-30\nT,2024,AL,A1,2024-03-01,closed,500,0,2026-09-30\n")
+    run([RET, "scope.csv", "--retentions", "1000", "--lines", "AL", "--immature-years", "none", "--out", "scope"], tmp)
+    check((tp / "scope.json").exists(), "bad WC row or superseded AL valuation blocked an AL replay")
+    check(fails([RET, "scope.csv", "--retentions", "1000"], "W1 (paid_loss)"), "bad in-scope amount not caught")
+    run([RET, "scope.csv", "--retentions", "1000", "--lines", "AL", "--out", "nomat"], tmp)
+    nm = json.loads((tp / "nomat.json").read_text()) if (tp / "nomat.json").exists() else {"summary": [{}], "notes": []}
+    check(nm["summary"][0].get("avg_annual_retained_mature_years", 0) is None
+          and "mature-years average is withheld" in " ".join(nm["notes"]),
+          f"mature average published without --immature-years: {nm['summary'][0]}")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"

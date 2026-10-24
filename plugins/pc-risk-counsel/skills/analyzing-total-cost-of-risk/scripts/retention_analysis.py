@@ -12,7 +12,8 @@ immature, and inflation and exposure changes are not adjusted unless the user su
 
 Usage:
   python retention_analysis.py claims.csv --retentions 25000,50000,100000 \
-      [--aggregate 250000] [--lines AL,GL] [--basis incurred|loss_only] [--out retention]
+      [--aggregate 250000] [--lines AL,GL] [--basis incurred|loss_only] \
+      --immature-years 2024,2025|none [--out retention]
 """
 import argparse
 import json
@@ -33,9 +34,25 @@ def to_number(v):
     if s in {"", "-", "--"} or s.lower() in {"n/a", "na"}:
         return float("nan")
     neg = s.startswith("(") and s.endswith(")")
-    s = re.sub(r"[,$()\s]", "", s)
+    if neg:
+        s = s[1:-1].strip()
+    sign = ""
+    if s[:1] in ("+", "-"):
+        sign, s = s[0], s[1:].lstrip()
+    if s.startswith("$"):
+        s = s[1:].strip()
+        if not sign and s[:1] in ("+", "-"):
+            sign, s = s[0], s[1:]
+    # Validate the whole format before dropping separators: "12,34" or "1(2)" is an OCR or typing
+    # error, not 1234 or 12, so it stays unreadable and gets flagged.
+    if re.search(r"[()$\s]", s):
+        return float("nan")
+    if "," in s:
+        if not re.fullmatch(r"\d{1,3}(,\d{3})+(\.\d+)?", s):
+            return float("nan")
+        s = s.replace(",", "")
     try:
-        n = float(s)
+        n = float(sign + s)
     except ValueError:
         return float("nan")
     if not math.isfinite(n):
@@ -80,7 +97,9 @@ def load(path, basis, notes):
     for c in ["carrier", "claim_number", "policy_year", "line"]:
         if c not in df.columns:
             sys.exit(f"claims.csv missing column: {c}")
-    bad_rows = []
+    # Bad amounts are recorded per row and checked in main() after dedupe and the --years/--lines
+    # filters, so a superseded valuation or an excluded line never blocks an otherwise valid replay.
+    df["_bad"] = ""
     for c in SPLIT + ["recoveries", "carrier_incurred"]:
         if c not in df.columns:
             df[c] = float("nan")
@@ -88,17 +107,14 @@ def load(path, basis, notes):
         raw = df[c].astype(str).str.strip()
         df[c] = df[c].map(to_number)
         bad = raw.ne("") & ~raw.str.lower().isin({"n/a", "na", "-", "--"}) & df[c].isna()
-        bad_rows += [f"{n} ({c})" for n in df.loc[bad, "claim_number"]]
-    for c in SPLIT + ["recoveries", "carrier_incurred"]:
-        bad_rows += [f"{n} (negative {c})" for n in df.loc[df[c] < 0, "claim_number"]]
-    if bad_rows:
-        sys.exit("Fix these amounts before replaying (run summarize_loss_runs.py to see every data flag): "
-                 + ", ".join(bad_rows))
+        df.loc[bad, "_bad"] += c + " "
+        df.loc[df[c] < 0, "_bad"] += f"negative {c} "
     df["valuation_date"] = pd.to_datetime(df.get("valuation_date", ""), errors="coerce")
     df["line"] = df["line"].str.strip().str.upper()
     df["carrier"] = df["carrier"].str.strip()
     df["claim_number"] = df["claim_number"].str.strip()  # same keys as summarize_loss_runs.py
-    df["policy_year"] = pd.to_numeric(df["policy_year"], errors="coerce").astype("Int64")
+    py = pd.to_numeric(df["policy_year"], errors="coerce")
+    df["policy_year"] = py.where(py.notna() & (py % 1 == 0)).astype("Int64")  # 2024.5 counts as unreadable
     # latest valuation per claim; rows missing carrier or claim number are never merged together
     df = df.sort_values("valuation_date", na_position="first")  # undated rows never win over dated ones
     no_id = df["claim_number"].str.strip().eq("") | df["carrier"].str.strip().eq("")
@@ -184,7 +200,8 @@ def main():
                     help="incurred = loss + expense less recoveries; loss_only excludes ALAE")
     ap.add_argument("--years", help="Policy years the loss runs cover, e.g. 2021-2025. Default: every year in "
                     "claims.csv before the line filter. Years with no claims count as zero retained.")
-    ap.add_argument("--immature-years", help="Comma-separated policy years to mark immature, e.g. 2024,2025")
+    ap.add_argument("--immature-years", help="Comma-separated policy years to mark immature, e.g. 2024,2025, "
+                    "or 'none'. Without it the mature-years average is withheld.")
     ap.add_argument("--out", default="retention")
     a = ap.parse_args()
 
@@ -200,7 +217,17 @@ def main():
     pairs = list(zip(rets, aggs or [None] * len(rets)))
     if len(set(pairs)) != len(pairs):
         sys.exit("The same retention and aggregate pair is listed twice. List each option once.")
-    immature = {int(y) for y in a.immature_years.split(",")} if a.immature_years else set()
+    maturity_known = a.immature_years is not None
+    if not maturity_known or a.immature_years.strip().lower() == "none":
+        immature = set()
+    else:
+        try:
+            immature = {int(y) for y in a.immature_years.split(",") if y.strip()}
+        except ValueError:
+            sys.exit("--immature-years must be policy years like 2024,2025, or 'none'.")
+    if not maturity_known:
+        notes.append("No --immature-years given, so the mature-years average is withheld. Recent years are "
+                     "still developing. Rerun with --immature-years (or 'none' if every year is mature).")
 
     df = load(a.claims, a.basis, notes)
     # Year range comes from the whole file (or --years), before the line filter, so a year
@@ -223,6 +250,10 @@ def main():
         notes.append(f"Lines included: {', '.join(sorted(keep))}.")
     if not years:
         sys.exit("No policy years found.")
+    bad = df[df["_bad"].str.strip().ne("")]
+    if len(bad):
+        sys.exit("Fix these amounts before replaying (run summarize_loss_runs.py to see every data flag): "
+                 + ", ".join(f"{n or '(no claim number)'} ({b.strip()})" for n, b in zip(bad["claim_number"], bad["_bad"])))
     empty_years = [y for y in years if not (df["policy_year"] == y).any()]
     if empty_years:
         notes.append(f"No claims in {', '.join(map(str, empty_years))} for the selected lines. Counted as zero "
@@ -243,7 +274,7 @@ def main():
             over = g[g["amount"] > ret]
             rows.append({
                 "option": option, "retention": ret, "aggregate": agg, "policy_year": y,
-                "immature": y in immature, "claims": int(len(g)), "total_losses": total,
+                "immature": (y in immature) if maturity_known else None, "claims": int(len(g)), "total_losses": total,
                 "retained": retained, "ceded": total - retained,
                 "retained_pct": retained / total if total else None,
                 "claims_piercing_retention": int(len(over)), "aggregate_hit": capped,
@@ -258,11 +289,11 @@ def main():
     summ = []
     # One row per retention+aggregate option, grouped on the raw numbers (labels are rounded).
     for _, g in detail.groupby(["retention", "aggregate"], dropna=False, sort=False):
-        mature = g[~g["immature"]]
+        mature = g[g["immature"].eq(False)]  # unknown maturity counts as not mature
         summ.append({
             "option": g["option"].iloc[0], "retention": g["retention"].iloc[0], "aggregate": g["aggregate"].iloc[0],
             "years": len(g), "avg_annual_retained_all_years": g["retained"].mean(),
-            "avg_annual_retained_mature_years": mature["retained"].mean() if len(mature) else None,
+            "avg_annual_retained_mature_years": mature["retained"].mean() if len(mature) and maturity_known else None,
             "worst_year_retained": g["retained"].max(),
             "worst_year": int(g.loc[g["retained"].idxmax(), "policy_year"]),
             "total_retained": g["retained"].sum(), "total_ceded": g["ceded"].sum(),
