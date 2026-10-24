@@ -148,6 +148,23 @@ with tempfile.TemporaryDirectory() as tmp:
     gl = [r for r in o["by_line"] if r["line"] == "GL"][0]
     check(abs(gl["loss_ratio"] - 7000 / 20000) < 1e-9, f"by-line ratio should use rated years only: {gl}")
 
+    # Fourth round: reported reserves kept on partial splits; undated claim years stay immature;
+    # premium-only lines stay in by_line.
+    (tp / "r4.csv").write_text(
+        "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,carrier_incurred,valuation_date\n"
+        "T,2021,GL,G1,2021-08-01,open,,4000,9000,2026-09-30\n"
+        "U,2023,AL,A1,2023-08-01,closed,500,0,,\n")
+    (tp / "r4_prem.csv").write_text("policy_year,line,earned_premium\n2021,GL,1000\n2023,AL,1000\n2022,UMB,500\n")
+    run([LR, "r4.csv", "--premium", "r4_prem.csv", "--as-of", "2026-10-24", "--out", "r4"], tmp)
+    r4 = json.loads((tp / "r4.json").read_text())
+    check(round(r4["totals"]["outstanding"]) == 4000, f"reported reserve dropped: {r4['totals']}")
+    check(round(r4["totals"]["incurred"]) == 9500, f"incurred wrong: {r4['totals']['incurred']}")
+    y23 = [y for y in r4["by_year"] if y["policy_year"] == 2023][0]
+    check(y23["immature"] is True and "unknown" in y23["maturity_basis"],
+          f"undated claim year must stay immature: {y23}")
+    umb = [r for r in r4["by_line"] if r["line"] == "UMB"]
+    check(len(umb) == 1 and umb[0]["claims"] == 0, f"premium-only line missing: {r4['by_line']}")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"

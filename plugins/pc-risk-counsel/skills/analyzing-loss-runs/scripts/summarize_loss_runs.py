@@ -133,7 +133,12 @@ def compute_amounts(df, flags):
     computed = df["paid"] + df["outstanding"] - rec
     df["incurred"] = computed.where(has_split, df["carrier_incurred"])
     df["incurred_source"] = has_split.map({True: "computed", False: "carrier"})
-    df.loc[~has_split, ["paid", "outstanding"]] = float("nan")
+    # When incurred comes from the carrier total, keep whatever paid or reserve parts the report
+    # did show (open-exposure totals need them); a part with nothing known stays unknown.
+    known_paid = df[["paid_loss", "paid_expense"]].sum(axis=1, min_count=1)
+    known_out = df[["outstanding_loss", "outstanding_expense"]].sum(axis=1, min_count=1)
+    df.loc[~has_split, "paid"] = known_paid[~has_split]
+    df.loc[~has_split, "outstanding"] = known_out[~has_split]
 
     for i, r in df.iterrows():
         if partial[i]:
@@ -274,7 +279,13 @@ def line_ratios(by_line, by_year_line):
     g = rated.groupby("line").agg(earned_premium=("earned_premium", "sum"),
                                   incurred_in_rated_years=("incurred", "sum"),
                                   rated_years=("policy_year", lambda s: ", ".join(str(int(y)) for y in sorted(s))))
-    out = by_line.merge(g.reset_index(), on="line", how="left")
+    out = by_line.merge(g.reset_index(), on="line", how="outer")  # premium-only lines stay, at zero losses
+    for c in ["claims", "open_claims", "incurred", "claims_over_large_loss"]:
+        out[c] = out[c].fillna(0)
+    for c in ["claims", "open_claims", "claims_over_large_loss"]:
+        out[c] = out[c].astype(int)
+    out.loc[out["claims"] == 0, ["paid", "outstanding"]] = 0.0
+    out = out.sort_values("line").reset_index(drop=True)
     out["loss_ratio"] = out["incurred_in_rated_years"] / out["earned_premium"].where(out["earned_premium"] != 0)
     return out
 
@@ -294,7 +305,7 @@ def add_maturity(by_year, df):
             start = pd.Timestamp(int(py), 12, 1) if pd.notna(py) else pd.NaT
             basis = "assumed Dec 1 start (no policy_effective)"
         val = pd.Timestamp(r["latest_valuation"]) if pd.notna(r["latest_valuation"]) else pd.NaT
-        if pd.isna(val) and pd.notna(report_date):
+        if pd.isna(val) and pd.notna(report_date) and r["claims"] == 0:
             # Claim-free year: the loss runs still cover it as of the latest report date.
             val = report_date
             basis += "; valued at latest report date (no claims this year)"
