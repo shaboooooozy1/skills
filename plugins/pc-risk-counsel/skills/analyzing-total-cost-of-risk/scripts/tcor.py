@@ -12,6 +12,7 @@ Usage:
 """
 import argparse
 import json
+import math
 import sys
 
 import pandas as pd
@@ -30,12 +31,13 @@ LABELS = {
 def num(v, where):
     if v is None or v == "":
         return 0.0
-    if isinstance(v, (int, float)):
-        return float(v)
     try:
-        return float(str(v).replace(",", "").replace("$", ""))
+        n = float(v) if isinstance(v, (int, float)) else float(str(v).replace(",", "").replace("$", ""))
     except ValueError:
         sys.exit(f"Not a number at {where}: {v!r}")
+    if not math.isfinite(n):
+        sys.exit(f"Not a finite number at {where}: {v!r}")
+    return n
 
 
 def sum_block(block, where):
@@ -70,6 +72,8 @@ def compute_period(p, i):
     amount = num(col.get("amount"), f"{label}.collateral.amount")
     rate = num(col.get("cost_rate"), f"{label}.collateral.cost_rate")
     fees = num(col.get("fees"), f"{label}.collateral.fees")
+    if amount < 0 or fees < 0:
+        sys.exit(f"{label}.collateral amount and fees cannot be negative.")
     if rate < 0:
         sys.exit(f"{label}.collateral.cost_rate cannot be negative ({rate}).")
     if rate > 1:
@@ -88,6 +92,9 @@ def compute_period(p, i):
         sys.exit(f"{label}.exposure must be positive. Leave it out if it is unknown.")
     row["notes"] = p.get("notes", "")
     row["source"] = p.get("source", "")
+    if not str(row["source"]).strip():
+        open_items.append("No source given for this period's figures")
+        row["open_items"] = "; ".join(open_items)
     return row, detail
 
 
@@ -163,9 +170,10 @@ def main():
         "client": cfg.get("client", ""),
         "exposure_base": {"name": base_name, "per": per},
         "periods": json.loads(out.to_json(orient="records")),
-        "review_gate": ("Draft for licensed-professional review. Figures are as supplied; projected retained "
-                        "losses are estimates, not actuarial projections. Premiums for alternative programs must "
-                        "come from carrier quotes."),
+        # Must match the review gate in analyzing-total-cost-of-risk/SKILL.md.
+        "review_gate": ("Draft for licensed-professional review. Figures are as supplied; scenario retained "
+                        "losses are historical replays, not actuarial projections. Alternative premiums come "
+                        "from carrier quotes."),
     }
     with open(f"{a.out}.json", "w") as f:
         json.dump(result, f, indent=2)

@@ -169,7 +169,7 @@ def check_rows(df, flags):
         if r["status"] and r["status"] not in STATUSES:
             flag(flags, r, "bad_status", f"Status '{r['status']}' is not open, closed, or reopened.")
         for c in MONEY:
-            if pd.notna(r[c]) and r[c] < 0 and c != "recoveries":
+            if pd.notna(r[c]) and r[c] < 0:  # recoveries too: the schema takes them as positive amounts
                 flag(flags, r, "negative_amount", f"{c} = {r[c]:,.0f}.")
         if r["status"] in {"open", "reopened"} and pd.notna(r["outstanding"]) and r["outstanding"] == 0:
             flag(flags, r, "open_zero_reserve", "Open claim carries no reserve. Ask the carrier.")
@@ -304,11 +304,14 @@ def attach_premium(out, group_cols, premium, ypremium=None):
 
 def line_ratios(by_line, by_year_line):
     """Line loss ratio over the policy years that have premium for that line only."""
-    rated = by_year_line[by_year_line["earned_premium"].notna() & (by_year_line["earned_premium"] > 0)]
+    known = by_year_line[by_year_line["earned_premium"].notna()]
+    rated = known[known["earned_premium"] > 0]  # a zero-premium year cannot be rated
+    lines = pd.DataFrame({"line": pd.Series(sorted(set(known["line"])), dtype=object)})  # every premium line stays
     g = rated.groupby("line").agg(earned_premium=("earned_premium", "sum"),
                                   incurred_in_rated_years=("incurred", "sum"),
                                   rated_years=("policy_year", lambda s: ", ".join(str(int(y)) for y in sorted(s))))
-    out = by_line.merge(g.reset_index(), on="line", how="outer")  # premium-only lines stay, at zero losses
+    g = lines.merge(g.reset_index(), on="line", how="left")
+    out = by_line.merge(g, on="line", how="outer")  # premium-only lines stay, at zero losses
     for c in ["claims", "open_claims", "incurred", "claims_over_large_loss"]:
         out[c] = out[c].fillna(0)
     for c in ["claims", "open_claims", "claims_over_large_loss"]:
@@ -332,7 +335,8 @@ def add_maturity(by_year, df):
     report_date = df["valuation_date"].max()
 
     def months_between(start, val):
-        return (val.year - start.year) * 12 + (val.month - start.month)
+        # Completed months only: Jan 31 to Jan 1 two years later is 23, not 24.
+        return (val.year - start.year) * 12 + (val.month - start.month) - (1 if val.day < start.day else 0)
 
     months_col, basis_col = [], []
     for _, r in by_year.iterrows():

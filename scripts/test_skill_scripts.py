@@ -315,6 +315,29 @@ with tempfile.TemporaryDirectory() as tmp:
                                                                  "collateral": {"amount": 50000, "cost_rate": -0.02}}]}))
     check(fails([TCOR, "tc_negrate.json"], "cannot be negative"), "negative collateral rate not rejected")
 
+    # Codex round on f1c8d83.
+    (tp / "f8.csv").write_text(
+        "carrier,policy_year,policy_effective,line,claim_number,loss_date,status,paid_loss,outstanding_loss,"
+        "recoveries,valuation_date\n"
+        "T,2024,2024-01-31,GL,G1,2024-03-01,closed,9000,0,(1000),2026-01-01\n")
+    (tp / "f8_prem.csv").write_text("policy_year,line,earned_premium\n2024,GL,5000\n2024,UMB,0\n")
+    run([LR, "f8.csv", "--premium", "f8_prem.csv", "--as-of", "2026-02-01", "--out", "f8"], tmp)
+    f8 = json.loads((tp / "f8.json").read_text())
+    check(f8["by_year"][0]["maturity_months"] == 23, f"partial month counted: {f8['by_year'][0]}")
+    check(f8["flag_counts"].get("negative_amount") == 1, f"negative recovery not flagged: {f8['flag_counts']}")
+    check(any(r["line"] == "UMB" for r in f8["by_line"]), "zero-premium-only line dropped from by_line")
+    run([RET, "f8.csv", "--retentions", "1000,1000", "--aggregate", "5000,9000", "--out", "f8r"], tmp)
+    pw = openpyxl.load_workbook(tp / "f8r.xlsx")["Claims_Over_Retention"]
+    check("aggregate" in [c.value for c in pw[1]], "piercing claims do not identify the option")
+    (tp / "tc_nan.json").write_text('{"periods": [{"label": "n", "premiums": "NaN", "source": "s"}]}')
+    check(fails([TCOR, "tc_nan.json"], "finite"), "non-finite TCOR input not rejected")
+    (tp / "tc_negamt.json").write_text(json.dumps({"periods": [{"label": "n", "premiums": 1, "source": "s",
+                                                                "collateral": {"amount": -1, "cost_rate": 0.01}}]}))
+    check(fails([TCOR, "tc_negamt.json"], "cannot be negative"), "negative collateral amount not rejected")
+    nosrc = json.loads((tp / "tc_open.json").read_text())
+    check("No source" in nosrc["periods"][0]["open_items"], "missing source not an open item")
+    check("historical replays" in nosrc["review_gate"], "TCOR review gate wording differs from SKILL.md")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"

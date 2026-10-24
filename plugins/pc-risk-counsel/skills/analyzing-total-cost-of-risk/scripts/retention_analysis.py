@@ -194,7 +194,8 @@ def main():
                 "claims_piercing_retention": int(len(over)), "aggregate_hit": capped,
             })
             for _, c in over.iterrows():
-                piercing.append({"retention": ret, "policy_year": y, "line": c["line"],
+                piercing.append({"option": option, "retention": ret, "aggregate": agg, "policy_year": y,
+                                 "line": c["line"],
                                  "claim_number": c["claim_number"], "amount": float(c["amount"]),
                                  "excess_over_retention": float(c["amount"] - ret)})
     detail = pd.DataFrame(rows)
