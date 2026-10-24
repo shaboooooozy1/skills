@@ -204,7 +204,7 @@ def main():
     df["tcor_change_vs_first"] = df["tcor"] - first["tcor"]
     df["tcor_change_pct_vs_first"] = df["tcor_change_vs_first"] / first["tcor"] if first["tcor"] else None
 
-    unit = f"TCOR per {per:,.0f} {base_name}"
+    unit = f"TCOR per {per:,.10g} {base_name}"  # 0.5 stays 0.5, 1000 shows as 1,000
     out = df.rename(columns={**LABELS, "tcor": "TCOR", "tcor_per_unit": unit})
 
     with pd.ExcelWriter(f"{a.out}.xlsx", engine="openpyxl") as xw:

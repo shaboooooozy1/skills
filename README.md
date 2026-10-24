@@ -44,7 +44,7 @@ Trigger-eval query sets live in `evals/<skill>/trigger-queries.json`, in the for
 
 ## Upstream: Anthropic example skills
 
-This repository is a fork of [anthropics/skills](https://github.com/anthropics/skills). `spec/`, `template/`, and the skills under `skills/` that also exist upstream come from Anthropic and keep their original licenses. Four skills under `skills/` were added in this fork and are not from upstream: `email-command-center`, `m365-email-command-center`, `apollo-enrich-lead`, and `combined-chatbot`. Check each one's folder for its license. The original README follows.
+This repository is a fork of [anthropics/skills](https://github.com/anthropics/skills). `spec/`, `template/`, and the skills under `skills/` that also exist upstream come from Anthropic and keep their original licenses. Four skills under `skills/` were added in this fork and are not from upstream: `email-command-center`, `m365-email-command-center`, `apollo-enrich-lead`, and `combined-chatbot`. `combined-chatbot` has a LICENSE file in its folder. `email-command-center`, `m365-email-command-center`, and `apollo-enrich-lead` have no license file yet, so no reuse terms are granted for them. Add one before sharing those skills. The original README follows.
 
 > **Note:** This repository contains Anthropic's implementation of skills for Claude. For information about the Agent Skills standard, see [agentskills.io](http://agentskills.io).
 

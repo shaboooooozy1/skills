@@ -58,7 +58,11 @@ def house_rules(skill_dir):
         errs.append(f"symlinks are not allowed in a skill: {', '.join(links)}")
     if (skill_dir / "README.md").exists():
         errs.append("README.md inside a skill folder; move it to repo level")
-    if not (fm.get("metadata") or {}).get("version"):
+    meta = fm.get("metadata")
+    if meta is not None and not isinstance(meta, dict):
+        errs.append("metadata must be a mapping, e.g. metadata: {version: 1.0.0}")
+        meta = {}
+    if not (meta or {}).get("version"):
         warns.append("no metadata.version")
     return errs, warns
 

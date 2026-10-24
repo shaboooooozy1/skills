@@ -732,6 +732,35 @@ with tempfile.TemporaryDirectory() as tmp:
     check(y22["maturity_months"] is None and y22["immature"] is True,
           f"claim-free year borrowed another carrier's report date: {y22['maturity_months']}")
 
+    # Codex round on daa4ba2.
+    (tp / "tz.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\nT,2024,GL,Z1,2024-03-01,closed,100,0,2025-01-01T00:00:00Z\n")
+    run([LR, "tz.csv", "--as-of", "2026-10-24", "--out", "tz"], tmp)
+    tzf = json.loads((tp / "tz.json").read_text())["flag_counts"] if (tp / "tz.json").exists() else {}
+    check(tzf.get("missing_field") == 1, f"timestamp valuation accepted or crashed: {tzf}")
+    (tp / "1c.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\nA,2024,GL,S1,2024-03-01,closed,100,0,2026-09-30\nA,2023,GL,S2,2023-03-01,closed,100,0,2024-01-31\n")
+    (tp / "1c_prem.csv").write_text("policy_year,line,earned_premium\n2022,GL,1000\n2023,GL,1000\n2024,GL,1000\n")
+    run([LR, "1c.csv", "--premium", "1c_prem.csv", "--as-of", "2026-10-24", "--out", "1c"], tmp)
+    c22 = [y for y in json.loads((tp / "1c.json").read_text())["by_year"] if y["policy_year"] == 2022][0]
+    check(c22["maturity_months"] is None, f"claim-free year borrowed a date from mixed reports: {c22['maturity_months']}")
+    (tp / "tc_half.json").write_text(json.dumps({"exposure_base": {"name": "units", "per": 0.5},
+                                                  "periods": [{"label": "P", "premiums": 1000, "exposure": 10}]}))
+    run([TCOR, "tc_half.json", "--out", "tc_half_out"], tmp)
+    check("TCOR per 0.5 units" in (tp / "tc_half_out.json").read_text(), "fractional exposure divisor mislabeled")
+    mv = tp / "mv"
+    (mv / "scripts").mkdir(parents=True)
+    (mv / "skills/skill-creator/scripts").mkdir(parents=True)
+    (mv / "plugins/p/skills/s").mkdir(parents=True)
+    (mv / "scripts/validate_skills.py").write_text((ROOT / "scripts/validate_skills.py").read_text())
+    (mv / ".claude-plugin").mkdir()
+    (mv / ".claude-plugin/marketplace.json").write_text('{"name": "t", "plugins": []}')
+    (mv / "skills/skill-creator/scripts/quick_validate.py").write_text(
+        (ROOT / "skills/skill-creator/scripts/quick_validate.py").read_text())
+    (mv / "plugins/p/skills/s/SKILL.md").write_text(
+        "---\nname: s\ndescription: Does a thing. Use when testing.\nmetadata: v1\n---\nBody\n")
+    r = subprocess.run([sys.executable, "-I", str(mv / "scripts/validate_skills.py"), "--only", "plugins"],
+                       capture_output=True, text=True)
+    check("Traceback" not in r.stderr and "metadata" in r.stdout, f"string metadata crashed the validator: {r.stderr[-200:]}")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"
