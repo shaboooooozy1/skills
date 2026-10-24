@@ -48,6 +48,9 @@ def house_rules(skill_dir):
         warns.append("description has no 'Use when…' trigger clause")
     if len(body.splitlines()) > 500:
         errs.append(f"SKILL.md body is {len(body.splitlines())} lines (max 500)")
+    links = [str(f.relative_to(skill_dir)) for f in skill_dir.rglob("*") if f.is_symlink()]
+    if links:
+        errs.append(f"symlinks are not allowed in a skill: {', '.join(links)}")
     if (skill_dir / "README.md").exists():
         errs.append("README.md inside a skill folder; move it to repo level")
     if not (fm.get("metadata") or {}).get("version"):

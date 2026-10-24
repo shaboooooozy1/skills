@@ -19,11 +19,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="dist")
     a = ap.parse_args()
-    out = ROOT / a.out
+    out = (ROOT / a.out).resolve()
     out.mkdir(exist_ok=True)
     for skill_md in sorted((ROOT / "plugins").glob("*/skills/*/SKILL.md")):
         d = skill_md.parent
-        files = [f for f in sorted(d.rglob("*")) if f.is_file() and not (set(f.parts) & SKIP_PARTS)]
+        root = d.resolve()
+        links = [f for f in d.rglob("*") if f.is_symlink()]
+        if links:
+            # A symlink could pull runner-local files (credentials, /proc) into a published ZIP.
+            raise SystemExit(f"{d.name}: symlinks are not allowed in skills: "
+                             + ", ".join(str(f.relative_to(d)) for f in links))
+        files = [f for f in sorted(d.rglob("*"))
+                 if f.is_file() and not f.is_symlink() and f.resolve().is_relative_to(root)
+                 and not (set(f.parts) & SKIP_PARTS)]
         size = sum(f.stat().st_size for f in files)
         if size > MAX_BYTES:
             raise SystemExit(f"{d.name} is {size / 1e6:.1f} MB uncompressed, over the 30 MB limit")
@@ -31,7 +39,7 @@ def main():
         with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED) as zf:
             for f in files:
                 zf.write(f, Path(d.name) / f.relative_to(d))
-        print(f"{z.relative_to(ROOT)}  ({len(files)} files, {size / 1024:.0f} KB)")
+        print(f"{z}  ({len(files)} files, {size / 1024:.0f} KB)")
 
 
 if __name__ == "__main__":
