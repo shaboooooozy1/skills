@@ -326,7 +326,10 @@ with tempfile.TemporaryDirectory() as tmp:
     check(f8["by_year"][0]["maturity_months"] == 23, f"partial month counted: {f8['by_year'][0]}")
     check(f8["flag_counts"].get("negative_amount") == 1, f"negative recovery not flagged: {f8['flag_counts']}")
     check(any(r["line"] == "UMB" for r in f8["by_line"]), "zero-premium-only line dropped from by_line")
-    run([RET, "f8.csv", "--retentions", "1000,1000", "--aggregate", "5000,9000", "--out", "f8r"], tmp)
+    (tp / "f8r.csv").write_text(
+        "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
+        "T,2024,GL,G1,2024-03-01,closed,9000,0,2026-01-01\n")
+    run([RET, "f8r.csv", "--retentions", "1000,1000", "--aggregate", "5000,9000", "--out", "f8r"], tmp)
     pw = openpyxl.load_workbook(tp / "f8r.xlsx")["Claims_Over_Retention"]
     check("aggregate" in [c.value for c in pw[1]], "piercing claims do not identify the option")
     (tp / "tc_nan.json").write_text('{"periods": [{"label": "n", "premiums": "NaN", "source": "s"}]}')
@@ -348,6 +351,22 @@ with tempfile.TemporaryDirectory() as tmp:
     (tp / "ur_prem.csv").write_text("policy_year,line,earned_premium,premium_basis\n2024,GL,5000,writen\n")
     check(fails([LR, "ur.csv", "--premium", "ur_prem.csv"], "premium_basis must be"), "bad premium basis accepted")
     check(fails([RET, "ur.csv", "--retentions", "1000", "--aggregate", "nan"], "finite"), "non-finite aggregate accepted")
+
+    # Codex round on 2515636.
+    check(fails([RET, "f8.csv", "--retentions", "1000"], "negative recoveries"), "negative recovery replayed")
+    check(fails([RET, "f8r.csv", "--retentions", "$25,000"], "plain numbers"), "thousands separator accepted")
+    check(fails([RET, "f8r.csv", "--retentions", "25,000"], "plain numbers"), "split thousands accepted")
+    (tp / "inf.csv").write_text("Year,Premium\n2024,Infinity\n")
+    check(fails([CHART, "inf.csv", "--title", "x"], "finite"), "non-finite chart value accepted")
+    (tp / "inf2.csv").write_text(
+        "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
+        "T,2024,GL,G1,2024-03-01,closed,Infinity,0,2026-09-30\n")
+    (tp / "negp.csv").write_text("policy_year,line,earned_premium\n2024,GL,1000\n2024,GL,-3000\n")
+    run([LR, "inf2.csv", "--premium", "negp.csv", "--as-of", "2026-10-24", "--out", "inf2"], tmp)
+    i2 = json.loads((tp / "inf2.json").read_text())
+    check(i2["flag_counts"].get("unreadable_amount") == 1, f"Infinity not flagged: {i2['flag_counts']}")
+    check(i2["by_year"][0]["loss_ratio"] is None and i2["totals"]["loss_ratio_years"] == [],
+          f"negative premium year rated: {i2['by_year'][0]}")
 
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(

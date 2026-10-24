@@ -38,10 +38,15 @@ def to_number(v):
         n = float(s)
     except ValueError:
         return float("nan")
+    if not math.isfinite(n):
+        return float("nan")  # "Infinity" and "nan" text count as unreadable
     return -n if neg else n
 
 
 def money_list(s, name):
+    parts = [x.strip() for x in s.split(",") if x.strip()]
+    if any("$" in x for x in parts) or any(re.fullmatch(r"0\d\d|000", x) for x in parts[1:]):
+        sys.exit(f"--{name}: use plain numbers with no $ or thousands separators, e.g. 25000,50000")
     try:
         vals = [float(x.replace(",", "").replace("$", "")) for x in s.split(",") if x.strip()]
     except ValueError:
@@ -57,8 +62,20 @@ def load(path, basis, notes):
     for c in ["carrier", "claim_number", "policy_year", "line"]:
         if c not in df.columns:
             sys.exit(f"claims.csv missing column: {c}")
+    bad_rows = []
     for c in SPLIT + ["recoveries", "carrier_incurred"]:
-        df[c] = df[c].map(to_number) if c in df.columns else float("nan")
+        if c not in df.columns:
+            df[c] = float("nan")
+            continue
+        raw = df[c].astype(str).str.strip()
+        df[c] = df[c].map(to_number)
+        bad = raw.ne("") & ~raw.str.lower().isin({"n/a", "na", "-", "--"}) & df[c].isna()
+        bad_rows += [f"{n} ({c})" for n in df.loc[bad, "claim_number"]]
+    neg_rec = df["recoveries"] < 0
+    bad_rows += [f"{n} (negative recoveries)" for n in df.loc[neg_rec, "claim_number"]]
+    if bad_rows:
+        sys.exit("Fix these amounts before replaying (run summarize_loss_runs.py to see every data flag): "
+                 + ", ".join(bad_rows))
     df["valuation_date"] = pd.to_datetime(df.get("valuation_date", ""), errors="coerce")
     df["line"] = df["line"].str.strip().str.upper()
     df["carrier"] = df["carrier"].str.strip()

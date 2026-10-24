@@ -11,6 +11,7 @@ Usage:
 """
 import argparse
 import json
+import math
 import re
 import sys
 from datetime import date
@@ -43,6 +44,8 @@ def to_number(v):
         n = float(s)
     except ValueError:
         return float("nan")
+    if not math.isfinite(n):
+        return float("nan")  # "Infinity" and "nan" text count as unreadable
     return -n if neg else n
 
 
@@ -304,7 +307,7 @@ def attach_premium(out, group_cols, premium, ypremium=None):
     out.loc[zero, ["paid", "outstanding"]] = 0.0
     out = out.sort_values(group_cols).reset_index(drop=True)
     out["loss_ratio"] = out["incurred"] / out["earned_premium"]
-    no_ratio = out["earned_premium"].isna() | (out["earned_premium"] == 0)
+    no_ratio = out["earned_premium"].isna() | (out["earned_premium"] <= 0)  # zero or negative: no ratio
     if "premium_complete" in out:
         no_ratio |= ~out["premium_complete"].fillna(False).astype(bool)
     out.loc[no_ratio, "loss_ratio"] = float("nan")

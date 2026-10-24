@@ -57,9 +57,12 @@ def read_csv(path):
             if raw.endswith("%"):
                 raw = str(float(raw[:-1]) / 100)
             try:
-                vals.append(float(raw) if raw else math.nan)  # blank = unknown, never zero
+                v = float(raw) if raw else math.nan  # blank = unknown, never zero
             except ValueError:
                 sys.exit(f"Non-numeric value {r[j]!r} in column {name!r}.")
+            if raw and not math.isfinite(v):
+                sys.exit(f"Value {r[j]!r} in column {name!r} is not a finite number.")
+            vals.append(v)
         series[name] = vals
     return cats, series
 
