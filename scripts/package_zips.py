@@ -39,6 +39,9 @@ def main():
         with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED) as zf:
             for f in files:
                 zf.write(f, Path(d.name) / f.relative_to(d))
+            plugin_license = d.parent.parent / "LICENSE"  # plugins/<plugin>/LICENSE
+            if plugin_license.is_file() and not (d / "LICENSE").exists():
+                zf.write(plugin_license, Path(d.name) / "LICENSE")  # MIT notice must travel with copies
         print(f"{z}  ({len(files)} files, {size / 1024:.0f} KB)")
 
 

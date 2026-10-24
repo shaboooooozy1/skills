@@ -44,13 +44,27 @@ def to_number(v):
 
 
 def money_list(s, name):
-    parts = [x.strip() for x in s.split(",") if x.strip()]
-    if any("$" in x for x in parts) or any(re.fullmatch(r"0\d\d|000", x) for x in parts[1:]):
-        sys.exit(f"--{name}: use plain numbers with no $ or thousands separators, e.g. 25000,50000")
+    """Options are separated by commas, or by semicolons when the numbers use thousands separators.
+
+    '25000,50000' -> [25000, 50000]; '25,000;50,000' -> [25000, 50000].
+    A comma list that also reads as one thousands-formatted number (e.g. '25,500') is ambiguous
+    and rejected.
+    """
+    s = s.strip()
+    if "$" in s:
+        sys.exit(f"--{name}: leave out the $ sign, e.g. 25000,50000")
+    if ";" in s:
+        parts = [x.strip().replace(",", "") for x in s.split(";") if x.strip()]
+    else:
+        if re.fullmatch(r"\d{1,3}(,\d{3})+", s):
+            sys.exit(f"--{name} '{s}' could be one number with thousands separators or several options. "
+                     "Write plain numbers (25500 or 25,500 as 25500) and separate options with commas, "
+                     "or use semicolons: 25,500;50,000")
+        parts = [x.strip() for x in s.split(",") if x.strip()]
     try:
-        vals = [float(x.replace(",", "").replace("$", "")) for x in s.split(",") if x.strip()]
+        vals = [float(x) for x in parts]
     except ValueError:
-        sys.exit(f"--{name} must be comma-separated numbers, e.g. 25000,50000")
+        sys.exit(f"--{name} must be numbers separated by commas, e.g. 25000,50000")
     if not all(math.isfinite(v) for v in vals):
         sys.exit(f"--{name} values must be finite numbers.")
     return vals
@@ -71,8 +85,8 @@ def load(path, basis, notes):
         df[c] = df[c].map(to_number)
         bad = raw.ne("") & ~raw.str.lower().isin({"n/a", "na", "-", "--"}) & df[c].isna()
         bad_rows += [f"{n} ({c})" for n in df.loc[bad, "claim_number"]]
-    neg_rec = df["recoveries"] < 0
-    bad_rows += [f"{n} (negative recoveries)" for n in df.loc[neg_rec, "claim_number"]]
+    for c in SPLIT + ["recoveries", "carrier_incurred"]:
+        bad_rows += [f"{n} (negative {c})" for n in df.loc[df[c] < 0, "claim_number"]]
     if bad_rows:
         sys.exit("Fix these amounts before replaying (run summarize_loss_runs.py to see every data flag): "
                  + ", ".join(bad_rows))
@@ -126,6 +140,15 @@ def load(path, basis, notes):
         notes.append(f"{int(no_amount.sum())} claim(s) have no known amount at all "
                      f"({', '.join(df.loc[no_amount, 'claim_number'].replace('', '(blank)'))}). Counted as 0, "
                      "so every scenario's retained losses are understated until they are filled in.")
+    # Same tolerance as summarize_loss_runs.py: name claims whose split disagrees with the carrier total.
+    total_split = df[SPLIT].fillna(0).sum(axis=1) - rec
+    mismatch = complete & df["carrier_incurred"].notna() & (
+        (total_split - df["carrier_incurred"]).abs()
+        > (0.005 * df["carrier_incurred"].abs()).clip(lower=1.0))
+    if mismatch.any():
+        notes.append(f"{int(mismatch.sum())} claim(s) have a paid/outstanding split that disagrees with the "
+                     f"carrier incurred total ({', '.join(df.loc[mismatch, 'claim_number'])}). The split was "
+                     "used. Resolve with the carrier before relying on these scenarios.")
     df["amount"] = amt.where(has_split, df["carrier_incurred"]).fillna(0).clip(lower=0)
     return df
 

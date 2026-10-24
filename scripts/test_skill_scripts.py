@@ -354,8 +354,23 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # Codex round on 2515636.
     check(fails([RET, "f8.csv", "--retentions", "1000"], "negative recoveries"), "negative recovery replayed")
-    check(fails([RET, "f8r.csv", "--retentions", "$25,000"], "plain numbers"), "thousands separator accepted")
-    check(fails([RET, "f8r.csv", "--retentions", "25,000"], "plain numbers"), "split thousands accepted")
+    check(fails([RET, "f8r.csv", "--retentions", "$25,000"], "$ sign"), "dollar sign accepted")
+    check(fails([RET, "f8r.csv", "--retentions", "25,000"], "thousands separators"), "split thousands accepted")
+    check(fails([RET, "f8r.csv", "--retentions", "25,500"], "thousands separators"), "25,500 split into two options")
+    run([RET, "f8r.csv", "--retentions", "25,500;50,000", "--out", "semi"], tmp)
+    semi = [s["retention"] for s in json.loads((tp / "semi.json").read_text())["summary"]]
+    check(semi == [25500, 50000], f"semicolon-separated options misparsed: {semi}")
+    (tp / "negl.csv").write_text(
+        "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,carrier_incurred,valuation_date\n"
+        "T,2024,GL,G1,2024-03-01,open,-1000,5000,,2026-09-30\nT,2024,GL,G2,2024-03-01,closed,100,0,900,2026-09-30\n")
+    check(fails([RET, "negl.csv", "--retentions", "1000"], "negative paid_loss"), "negative paid loss replayed")
+    (tp / "mm.csv").write_text(
+        "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,carrier_incurred,valuation_date\n"
+        "T,2024,GL,G2,2024-03-01,closed,100,0,900,2026-09-30\n")
+    run([RET, "mm.csv", "--retentions", "1000", "--out", "mm"], tmp)
+    check("disagrees with the carrier incurred" in " ".join(json.loads((tp / "mm.json").read_text())["notes"]),
+          "split/carrier mismatch not noted in replay")
+    check(fails([LR, "mm.csv", "--large-loss", "nan"], "--large-loss"), "non-finite large-loss threshold accepted")
     (tp / "inf.csv").write_text("Year,Premium\n2024,Infinity\n")
     check(fails([CHART, "inf.csv", "--title", "x"], "finite"), "non-finite chart value accepted")
     (tp / "inf2.csv").write_text(

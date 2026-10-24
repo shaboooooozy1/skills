@@ -427,6 +427,8 @@ def main():
     p.add_argument("--stale-days", type=int, default=90)
     p.add_argument("--out", default="loss_summary")
     a = p.parse_args()
+    if not math.isfinite(a.large_loss) or a.large_loss < 0:
+        sys.exit("--large-loss must be a finite number of zero or more.")
 
     flags = []
     df = load_claims(a.claims)
