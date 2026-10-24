@@ -302,7 +302,7 @@ def add_maturity(by_year, df):
         basis_col.append(basis)
     by_year["maturity_months"] = months_col
     by_year["maturity_basis"] = basis_col
-    by_year["immature"] = by_year["maturity_months"].map(lambda m: bool(m is None or m < 24))
+    by_year["immature"] = by_year["maturity_months"].map(lambda m: bool(pd.isna(m) or m < 24))
     return by_year
 
 
