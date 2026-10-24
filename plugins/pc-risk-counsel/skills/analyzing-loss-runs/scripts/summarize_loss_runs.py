@@ -220,34 +220,42 @@ def summarize(df, group_cols, premium, large, ypremium=None):
 def year_premium(df, premium, flags):
     """Premium per policy year, and whether it covers every line with claims that year.
 
-    Per-line rows are summed. An ALL row means premium for lines not listed separately (a package),
-    so ALL and per-line rows add without double counting. Without an ALL row, a year's loss ratio
-    is computed only when every line with claims that year has premium.
+    Coverage rules, per line with claims:
+      - any premium row for that line is blank or unreadable -> not covered (premium partly unknown)
+      - the line has known premium rows -> covered
+      - the line is not listed -> covered only by a known ALL row (ALL = lines not listed separately)
+    A year's loss ratio is computed only when every line with claims is covered.
     """
+    def ylabel(py):
+        return f"(policy year {int(py)})"
+
     rows = []
     claim_lines = df.groupby("policy_year")["line"].apply(set)
     for py in sorted(set(premium["policy_year"].dropna()) | set(claim_lines.index.dropna())):
-        prem_all_rows = premium[premium["policy_year"] == py]
-        unknown = prem_all_rows[prem_all_rows["earned_premium"].isna()]
-        if len(unknown):
-            flags.append({"row": None, "carrier": "", "claim_number": f"(policy year {int(py)})",
-                          "flag": "premium_unreadable",
-                          "detail": f"Premium blank or unreadable for {', '.join(sorted(unknown['line']))}. "
-                                    "Those lines count as having no premium."})
-        prem = prem_all_rows[prem_all_rows["earned_premium"].notna()]  # unknown premium covers nothing
-        has_all = (prem["line"] == "ALL").any()
-        prem_lines = set(prem.loc[prem["line"] != "ALL", "line"])
-        missing = sorted(claim_lines.get(py, set()) - prem_lines) if not has_all else []
-        total = prem["earned_premium"].sum(min_count=1)
-        if has_all and prem_lines:
-            flags.append({"row": None, "carrier": "", "claim_number": f"(policy year {int(py)})",
-                          "flag": "premium_all_and_lines",
-                          "detail": f"Premium has an ALL row and per-line rows ({', '.join(sorted(prem_lines))}). "
+        yr = premium[premium["policy_year"] == py]
+        unknown_rows = yr[yr["earned_premium"].isna()]
+        lines = yr[yr["line"] != "ALL"]
+        listed = set(lines["line"])
+        unknown_lines = set(lines.loc[lines["earned_premium"].isna(), "line"])
+        known_lines = set(lines.loc[lines["earned_premium"].notna(), "line"]) - unknown_lines
+        all_rows = yr[yr["line"] == "ALL"]
+        all_known = len(all_rows) > 0 and all_rows["earned_premium"].notna().all()
+        missing = sorted(
+            ln for ln in claim_lines.get(py, set())
+            if ln in unknown_lines or (ln not in known_lines and not (ln not in listed and all_known)))
+        total = yr["earned_premium"].sum(min_count=1)
+        if len(unknown_rows):
+            flags.append({"row": None, "carrier": "", "claim_number": ylabel(py), "flag": "premium_unreadable",
+                          "detail": f"Premium blank or unreadable for {', '.join(sorted(unknown_rows['line']))}. "
+                                    "Those lines are treated as having unknown premium."})
+        if len(all_rows) and listed:
+            flags.append({"row": None, "carrier": "", "claim_number": ylabel(py), "flag": "premium_all_and_lines",
+                          "detail": f"Premium has an ALL row and per-line rows ({', '.join(sorted(listed))}). "
                                     "They were added. Confirm ALL excludes the listed lines."})
-        if missing and pd.notna(total):
-            flags.append({"row": None, "carrier": "", "claim_number": f"(policy year {int(py)})",
-                          "flag": "premium_missing_lines",
-                          "detail": f"No premium for {', '.join(missing)}. Year loss ratio not computed."})
+        if missing:
+            flags.append({"row": None, "carrier": "", "claim_number": ylabel(py), "flag": "premium_missing_lines",
+                          "detail": f"Premium missing or unknown for {', '.join(missing)}. "
+                                    "Year loss ratio not computed."})
         rows.append({"policy_year": py, "earned_premium": total, "premium_complete": not missing})
     out = pd.DataFrame(rows)
     out["policy_year"] = out["policy_year"].astype("Int64")
@@ -260,8 +268,10 @@ def attach_premium(out, group_cols, premium, ypremium=None):
     if group_cols == ["policy_year"]:
         p = ypremium
     elif group_cols == ["policy_year", "line"]:
+        # Any blank row makes that year-line's premium unknown rather than a partial sum.
         p = (premium[premium["line"] != "ALL"]
-             .groupby(group_cols, as_index=False)["earned_premium"].sum(min_count=1))
+             .groupby(group_cols, as_index=False)["earned_premium"]
+             .agg(lambda s: s.sum() if s.notna().all() else float("nan")))
     else:
         return out
     out = out.merge(p, on=group_cols, how="outer")

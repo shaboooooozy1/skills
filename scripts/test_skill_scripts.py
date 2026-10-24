@@ -178,6 +178,24 @@ with tempfile.TemporaryDirectory() as tmp:
     check(bp["flag_counts"].get("premium_unreadable") == 1 and bp["flag_counts"].get("premium_missing_lines") == 1,
           f"flags {bp['flag_counts']}")
 
+    # ALL row plus a blank listed line, and a line with one known and one blank row: both unrated.
+    (tp / "al.csv").write_text(
+        "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
+        "T,2024,WC,W1,2024-08-01,closed,30000,0,2026-09-30\n"
+        "T,2024,GL,G1,2024-08-01,closed,20000,0,2026-09-30\n"
+        "T,2025,AL,A1,2025-08-01,closed,5000,0,2026-09-30\n")
+    (tp / "al_prem.csv").write_text(
+        "policy_year,line,earned_premium\n2024,ALL,50000\n2024,WC,\n2025,AL,10000\n2025,AL,\n")
+    run([LR, "al.csv", "--premium", "al_prem.csv", "--as-of", "2026-10-24", "--out", "al"], tmp)
+    al = json.loads((tp / "al.json").read_text())
+    ay = {y["policy_year"]: y for y in al["by_year"]}
+    check(ay[2024]["loss_ratio"] is None and ay[2025]["loss_ratio"] is None,
+          f"partly unknown premium must leave years unrated: {ay}")
+    check(al["totals"]["loss_ratio_years"] == [], f"rated years {al['totals']['loss_ratio_years']}")
+    al25 = [r for r in al["by_year_line"] if r["policy_year"] == 2025 and r["line"] == "AL"][0]
+    check(al25["loss_ratio"] is None, f"year-line with a blank row must be unrated: {al25}")
+    check(al["flag_counts"].get("premium_all_and_lines") == 1, f"flags {al['flag_counts']}")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"
