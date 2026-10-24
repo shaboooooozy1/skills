@@ -37,7 +37,13 @@ def read_table(path):
     """Read a CSV as text, stopping on repeated headers. pandas would rename a second
     'paid_loss' to 'paid_loss.1' and quietly ignore it."""
     with open(path, newline="", encoding="utf-8-sig") as f:
-        header = next(csv.reader(f), [])
+        rows = list(csv.reader(f))
+    header = rows[0] if rows else []
+    wide = [i + 1 for i, r in enumerate(rows[1:], start=1)
+            if len(r) != len(header) and any(c.strip() for c in r)]
+    if wide:
+        sys.exit(f"{path}: row(s) {', '.join(map(str, wide[:10]))} have a different number of fields than the "
+                 "header. Quote amounts with commas, e.g. \"1,000\".")
     norm = [h.strip().lower() for h in header]
     dupes = sorted({h for h in norm if h and norm.count(h) > 1})
     if dupes:
@@ -52,6 +58,12 @@ def guard_outputs(inputs, out):
     hit = [str(o) for o in (Path(f"{out}.xlsx").resolve(), Path(f"{out}.json").resolve()) if o in ins]
     if hit:
         sys.exit(f"--out {out} would overwrite the input {hit[0]}. Choose a different --out name.")
+
+
+def valid_year(s):
+    """Policy year as Int64: whole numbers from 1900 to 2100 only. 2024.5 or 20245 become unreadable."""
+    y = pd.to_numeric(s, errors="coerce")
+    return y.where(y.notna() & (y % 1 == 0) & y.between(1900, 2100)).astype("Int64")
 
 
 def to_number(v):
@@ -114,8 +126,7 @@ def load_claims(path):
         df[c] = df[c].astype(str).str.strip()
     df["line"] = df["line"].str.upper()
     df["status"] = df["status"].str.lower()
-    py = pd.to_numeric(df["policy_year"], errors="coerce")
-    df["policy_year"] = py.where(py.notna() & (py % 1 == 0)).astype("Int64")  # 2024.5 counts as unreadable
+    df["policy_year"] = valid_year(df["policy_year"])
     eff_raw = df["policy_effective"].astype(str).str.strip()
     for c in ["loss_date", "valuation_date", "policy_effective"]:
         df[c] = pd.to_datetime(df[c].replace("", None), errors="coerce")
@@ -135,7 +146,7 @@ def flag(flags, row, kind, detail):
 
 def dedupe(df, flags):
     """Keep the latest valuation per (carrier, claim_number). Flag true duplicates."""
-    df = df.sort_values("valuation_date")
+    df = df.sort_values("valuation_date", kind="stable")  # stable: ties keep file order, first row wins
     no_id = df["claim_number"].str.strip().eq("") | df["carrier"].str.strip().eq("")
     keep = list(df.index[no_id])  # rows without a full key are kept as-is and flagged later
     for _, g in df[~no_id].groupby(["carrier", "claim_number"], sort=False):
@@ -522,8 +533,7 @@ def main():
         for c in ["policy_year", "line", "earned_premium"]:
             if c not in premium.columns:
                 sys.exit(f"premium.csv is missing column: {c}")
-        ppy = pd.to_numeric(premium["policy_year"], errors="coerce")
-        premium["policy_year"] = ppy.where(ppy.notna() & (ppy % 1 == 0)).astype("Int64")  # 2024.5 -> bad year
+        premium["policy_year"] = valid_year(premium["policy_year"])  # 2024.5 or 20245 -> premium_bad_year
         bad_year = premium[premium["policy_year"].isna()]
         if len(bad_year):
             flags.append({"row": None, "carrier": "", "claim_number": f"({len(bad_year)} premium rows)",

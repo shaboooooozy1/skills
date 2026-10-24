@@ -77,6 +77,10 @@ def sum_block(block, where):
     if isinstance(block, (bool, int, float, str)):
         n = num(block, where)
         return n, {"(single amount)": n}  # keep scalar inputs in the Detail sheet's audit trail
+    if block in ({}, []):
+        return 0.0, {}
+    if not isinstance(block, dict):
+        sys.exit(f"{where}: use a number or an object like {{\"WC\": 1000}}.")
     items = {k: num(v, f"{where}.{k}") for k, v in block.items()}
     return sum(items.values()), items
 
@@ -91,7 +95,9 @@ def compute_period(p, i):
         sys.exit(f"{label}: every premium is blank. TCOR cannot be computed without at least one premium.")
     for comp in ["premiums", "retained_losses", "admin", "risk_control"]:
         block = p.get(comp)
-        if block in (None, "", {}):
+        if isinstance(block, list) and block:
+            sys.exit(f"{label}.{comp}: use a number or an object like {{\"WC\": 1000}}, not a list.")
+        if block in (None, "", {}, []):
             open_items.append(f"{LABELS[comp]} not supplied (counted as 0)")
         elif isinstance(block, dict):
             open_items += [f"{LABELS[comp]}: {k} blank (counted as 0)" for k, v in block.items() if v in (None, "")]

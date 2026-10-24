@@ -32,7 +32,13 @@ def read_table(path):
     """Read a CSV as text, stopping on repeated headers. pandas would rename a second
     'paid_loss' to 'paid_loss.1' and quietly ignore it."""
     with open(path, newline="", encoding="utf-8-sig") as f:
-        header = next(csv.reader(f), [])
+        rows = list(csv.reader(f))
+    header = rows[0] if rows else []
+    wide = [i + 1 for i, r in enumerate(rows[1:], start=1)
+            if len(r) != len(header) and any(c.strip() for c in r)]
+    if wide:
+        sys.exit(f"{path}: row(s) {', '.join(map(str, wide[:10]))} have a different number of fields than the "
+                 "header. Quote amounts with commas, e.g. \"1,000\".")
     norm = [h.strip().lower() for h in header]
     dupes = sorted({h for h in norm if h and norm.count(h) > 1})
     if dupes:
@@ -47,6 +53,12 @@ def guard_outputs(inputs, out):
     hit = [str(o) for o in (Path(f"{out}.xlsx").resolve(), Path(f"{out}.json").resolve()) if o in ins]
     if hit:
         sys.exit(f"--out {out} would overwrite the input {hit[0]}. Choose a different --out name.")
+
+
+def valid_year(s):
+    """Policy year as Int64: whole numbers from 1900 to 2100 only. 2024.5 or 20245 become unreadable."""
+    y = pd.to_numeric(s, errors="coerce")
+    return y.where(y.notna() & (y % 1 == 0) & y.between(1900, 2100)).astype("Int64")
 
 
 def to_number(v):
@@ -140,10 +152,12 @@ def load(path):
     df["line"] = df["line"].str.strip().str.upper()
     df["carrier"] = df["carrier"].str.strip()
     df["claim_number"] = df["claim_number"].str.strip()  # same keys as summarize_loss_runs.py
-    py = pd.to_numeric(df["policy_year"], errors="coerce")
-    df["policy_year"] = py.where(py.notna() & (py % 1 == 0)).astype("Int64")  # 2024.5 counts as unreadable
+    df["policy_year"] = valid_year(df["policy_year"])
     # latest valuation per claim; rows missing carrier or claim number are never merged together
-    df = df.sort_values("valuation_date", na_position="first")  # undated rows never win over dated ones
+    # Undated rows never win over dated ones. Among ties (same latest date, or all undated) the earliest
+    # file row wins, the same rule summarize_loss_runs.py uses, so both scripts replay the same amounts.
+    df["_order"] = range(len(df))
+    df = df.sort_values(["valuation_date", "_order"], ascending=[True, False], na_position="first", kind="stable")
     no_id = df["claim_number"].str.strip().eq("") | df["carrier"].str.strip().eq("")
     keyed = df[~no_id]
     undated_dups = keyed[keyed["valuation_date"].isna()

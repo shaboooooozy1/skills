@@ -545,6 +545,34 @@ with tempfile.TemporaryDirectory() as tmp:
     check(fails([LR, "mm.csv", "--as-of", "2026-13-45"], "--as-of"), "malformed --as-of accepted")
     check(fails([LR, "noyr.csv", "--as-of", "yesterday"], "--as-of"), "malformed --as-of accepted on undated file")
 
+    # Codex round on a0903ea.
+    (tp / "tie2.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
+        "T,2024,GL,K1,2024-03-01,closed,300,0,2026-09-30\nT,2024,GL,K1,2024-03-01,closed,900,0,2026-09-30\n"
+        "T,2024,GL,K2,2024-03-01,closed,111,0,\nT,2024,GL,K2,2024-03-01,closed,999,0,\n")
+    run([LR, "tie2.csv", "--as-of", "2026-10-24", "--out", "tie2"], tmp)
+    run([RET, "tie2.csv", "--retentions", "100000", "--immature-years", "none", "--out", "tie2_ret"], tmp)
+    lr_inc = json.loads((tp / "tie2.json").read_text())["totals"]["incurred"]
+    ret_tot = json.loads((tp / "tie2_ret.json").read_text())["summary"][0]["total_retained"]
+    check(lr_inc == ret_tot == 411, f"summary ({lr_inc}) and replay ({ret_tot}) kept different duplicate rows")
+    (tp / "shift.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\nT,2024,GL,S1,2024-03-01,closed,1,000,0,2026-09-30\n")
+    check(fails([LR, "shift.csv"], "different number of fields"), "unquoted 1,000 shifted claim columns")
+    check(fails([RET, "shift.csv", "--retentions", "1000"], "different number of fields"), "replay accepted shifted row")
+    (tp / "yr5.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
+        "T,20245,GL,Y5,2024-03-01,closed,100,0,2026-09-30\nT,2024,GL,Y6,2024-03-01,closed,200,0,2026-09-30\n")
+    run([RET, "yr5.csv", "--retentions", "1000", "--immature-years", "none", "--out", "yr5"], tmp)
+    yrs = [r["policy_year"] for r in json.loads((tp / "yr5.json").read_text())["by_year"]]
+    check(yrs == [2024], f"policy year 20245 became a replay year: {yrs}")
+    run([LR, "yr5.csv", "--as-of", "2026-10-24", "--out", "yr5_lr"], tmp)
+    y5 = json.loads((tp / "yr5_lr.json").read_text()) if (tp / "yr5_lr.json").exists() else {"flag_counts": {}}
+    check(y5["flag_counts"].get("missing_field") == 1,
+          "policy year 20245 not flagged by the loss-run script")
+    (tp / "tc_list.json").write_text(json.dumps({"periods": [{"label": "P", "premiums": 1000, "admin": []}]}))
+    run([TCOR, "tc_list.json", "--out", "tc_list_out"], tmp)
+    tl = json.loads((tp / "tc_list_out.json").read_text())["periods"][0] if (tp / "tc_list_out.json").exists() else {}
+    check("Administration not supplied" in str(tl.get("open_items")), f"empty list component crashed TCOR: {tl}")
+    (tp / "tc_list2.json").write_text(json.dumps({"periods": [{"label": "P", "premiums": 1000, "admin": [5]}]}))
+    check(fails([TCOR, "tc_list2.json"], "not a list"), "list component accepted")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"
