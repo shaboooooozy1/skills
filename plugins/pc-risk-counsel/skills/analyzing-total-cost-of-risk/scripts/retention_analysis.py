@@ -16,6 +16,7 @@ Usage:
 """
 import argparse
 import json
+import math
 import re
 import sys
 
@@ -42,9 +43,12 @@ def to_number(v):
 
 def money_list(s, name):
     try:
-        return [float(x.replace(",", "").replace("$", "")) for x in s.split(",") if x.strip()]
+        vals = [float(x.replace(",", "").replace("$", "")) for x in s.split(",") if x.strip()]
     except ValueError:
         sys.exit(f"--{name} must be comma-separated numbers, e.g. 25000,50000")
+    if not all(math.isfinite(v) for v in vals):
+        sys.exit(f"--{name} values must be finite numbers.")
+    return vals
 
 
 def load(path, basis, notes):

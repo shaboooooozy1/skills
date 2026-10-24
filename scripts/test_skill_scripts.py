@@ -338,6 +338,17 @@ with tempfile.TemporaryDirectory() as tmp:
     check("No source" in nosrc["periods"][0]["open_items"], "missing source not an open item")
     check("historical replays" in nosrc["review_gate"], "TCOR review gate wording differs from SKILL.md")
 
+    # Codex round on c304d80.
+    (tp / "ur.csv").write_text(
+        "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,recoveries,valuation_date\n"
+        "T,2024,GL,G1,2024-03-01,closed,1000,0,UNREADABLE,2026-09-30\n")
+    run([LR, "ur.csv", "--as-of", "2026-10-24", "--out", "ur"], tmp)
+    check(json.loads((tp / "ur.json").read_text())["flag_counts"].get("unreadable_amount") == 1,
+          "unreadable recovery not flagged")
+    (tp / "ur_prem.csv").write_text("policy_year,line,earned_premium,premium_basis\n2024,GL,5000,writen\n")
+    check(fails([LR, "ur.csv", "--premium", "ur_prem.csv"], "premium_basis must be"), "bad premium basis accepted")
+    check(fails([RET, "ur.csv", "--retentions", "1000", "--aggregate", "nan"], "finite"), "non-finite aggregate accepted")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"

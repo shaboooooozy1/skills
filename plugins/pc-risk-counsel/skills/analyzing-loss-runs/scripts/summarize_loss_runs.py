@@ -59,8 +59,13 @@ def load_claims(path):
         if c not in df.columns:
             df[c] = ""
     df["_row"] = range(2, len(df) + 2)  # spreadsheet row number incl. header
+    df["_unreadable"] = ""
     for c in MONEY:
+        raw = df[c].astype(str).str.strip()
         df[c] = df[c].map(to_number)
+        # Text that is present but not a number is not the same as a blank cell: remember it.
+        bad = raw.ne("") & ~raw.str.lower().isin({"n/a", "na", "-", "--"}) & df[c].isna()
+        df.loc[bad, "_unreadable"] = df.loc[bad, "_unreadable"] + c + " "
     for c in ["carrier", "line", "claim_number", "status", "cause"]:
         df[c] = df[c].astype(str).str.strip()
     df["line"] = df["line"].str.upper()
@@ -185,6 +190,10 @@ def check_rows(df, flags):
             elif pd.notna(r["policy_year"]) and r["loss_date"].year not in (int(r["policy_year"]), int(r["policy_year"]) + 1):
                 flag(flags, r, "loss_date_outside_term",
                      f"Loss year {r['loss_date'].year} does not fit policy year {int(r['policy_year'])}.")
+        if str(r.get("_unreadable", "")).strip():
+            flag(flags, r, "unreadable_amount",
+                 f"Unreadable value in {', '.join(r['_unreadable'].split())}. Treated as unknown; "
+                 "totals that use it may be wrong. Confirm with the carrier report.")
         if "UNREADABLE" in str(r["cause"]).upper():
             flag(flags, r, "unreadable_source", "Marked unreadable during extraction. Confirm with carrier report.")
 
@@ -452,6 +461,8 @@ def main():
         # A blank basis means earned (the default), also in a file where other rows say written.
         raw_basis = premium["premium_basis"] if "premium_basis" in premium else pd.Series([""] * len(premium))
         bases = set(raw_basis.str.strip().str.lower().replace("", "earned"))
+        if bases - {"earned", "written"}:
+            sys.exit(f"premium_basis must be earned, written, or blank. Found: {', '.join(sorted(bases - {'earned', 'written'}))}")
         basis = "earned" if bases <= {"earned"} else ("written" if bases == {"written"} else "mixed")
 
     ypremium = year_premium(df, premium, flags) if premium is not None else None
