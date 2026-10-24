@@ -5,7 +5,10 @@
 ### Fixed in review (PR #17)
 - Loss runs: blank claim numbers are no longer merged as one claim; a partial paid/outstanding split falls back to carrier incurred instead of counting unknowns as zero; duplicate premium rows for a year and line are summed; premium-only years and lines appear with zero losses; maturity no longer assumes a January 1 start; JSON now includes year-by-line totals and open claims; the Claims sheet exports schema columns only, so claimant names and notes never leave.
 - Retention replay: same blank-claim and partial-split rules as the loss-run script.
-- Charts: negative values are no longer clipped at zero.
+- Loss runs: year and all-years loss ratios only use years whose premium covers every line with claims; ALL premium is defined as lines not listed separately; written premium is labeled as written; duplicate rows with no readable valuation date no longer crash the script.
+- Retention replay: policy years with no claims in the selected lines count as zero retained (new `--years` flag); an undated row never wins over a dated valuation.
+- Charts: negative values are no longer clipped at zero; blank cells show as gaps, not zeros.
+- `m365-email-command-center` description narrowed to inbox-level work.
 - README: upstream install section now adds this repository's marketplace.
 
 ### Added

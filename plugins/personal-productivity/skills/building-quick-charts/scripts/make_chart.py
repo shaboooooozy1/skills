@@ -8,6 +8,7 @@ Usage:
 """
 import argparse
 import csv
+import math
 import sys
 
 import matplotlib
@@ -52,7 +53,7 @@ def read_csv(path):
             if raw.endswith("%"):
                 raw = str(float(raw[:-1]) / 100)
             try:
-                vals.append(float(raw) if raw else 0.0)
+                vals.append(float(raw) if raw else math.nan)  # blank = unknown, never zero
             except ValueError:
                 sys.exit(f"Non-numeric value {r[j]!r} in column {name!r}.")
         series[name] = vals
@@ -89,9 +90,15 @@ def main():
                     markersize=6, label=name)
             if a.labels:
                 for xi, v in zip(x, series[name]):
+                    if math.isnan(v):
+                        continue
                     ax.annotate(fmt_value(v, a.format), (xi, v), textcoords="offset points",
                                 xytext=(0, 9), ha="center", fontsize=10, color=INK)
     elif a.type == "stacked":
+        blanks = sum(math.isnan(v) for vals in series.values() for v in vals)
+        if blanks:
+            print(f"Note: {blanks} blank cell(s) drawn as zero in the stack. Say so on the slide.", file=sys.stderr)
+            series = {k: [0.0 if math.isnan(v) else v for v in vals] for k, vals in series.items()}
         bottom = [0.0] * len(cats)
         tallest = max(sum(series[nm][k] for nm in names) for k in range(len(cats))) or 1
         for i, name in enumerate(names):
@@ -112,6 +119,8 @@ def main():
             bars = ax.bar(offs, series[name], width * 0.92, color=PALETTE[i % len(PALETTE)], label=name)
             if a.labels:
                 for b, v in zip(bars, series[name]):
+                    if math.isnan(v):
+                        continue  # blank: no bar, no label
                     ax.text(b.get_x() + b.get_width() / 2, v, fmt_value(v, a.format),
                             ha="center", va="bottom" if v >= 0 else "top", fontsize=10, color=INK)
 

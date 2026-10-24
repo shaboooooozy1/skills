@@ -99,6 +99,42 @@ with tempfile.TemporaryDirectory() as tmp:
     check(round(er["summary"][0]["total_retained"]) == 1000 + 2000 + 10000 + 3000,
           f"retention replay partial/blank handling wrong: {er['summary'][0]['total_retained']}")
 
+    # Second review round: premium coverage, written basis, undated duplicates, zero-claim years.
+    (tp / "cov.csv").write_text(
+        "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
+        "T,2022,WC,W1,2022-05-01,closed,1000,0,2026-09-30\n"
+        "T,2022,AL,A1,2022-06-01,closed,4000,0,2026-09-30\n"
+        "T,2023,WC,W2,2023-05-01,closed,2000,0,2026-09-30\n"
+        "T,2023,AL,A2,2023-06-01,closed,3000,0,\n"
+        "T,2023,AL,A2,2023-06-01,closed,3500,0,\n"
+        "T,2024,AL,A3,2024-06-01,closed,9000,0,2026-09-30\n")
+    (tp / "cov_prem.csv").write_text(
+        "policy_year,line,earned_premium,premium_basis\n"
+        "2022,WC,10000,written\n"            # AL missing -> no 2022 year ratio
+        "2023,ALL,20000,written\n"           # package covers all lines -> 2023 ratio
+        "2024,AL,30000,written\n")
+    run([LR, "cov.csv", "--premium", "cov_prem.csv", "--as-of", "2026-10-24", "--out", "cov"], tmp)
+    c = json.loads((tp / "cov.json").read_text())
+    ct, cy = c["totals"], {y["policy_year"]: y for y in c["by_year"]}
+    check(cy[2022].get("loss_ratio_written") is None, f"2022 ratio should be withheld: {cy[2022]}")
+    check(abs(cy[2023]["loss_ratio_written"] - 5000 / 20000) < 1e-9, f"2023 ALL ratio wrong: {cy[2023]}")
+    check(ct["loss_ratio_years"] == [2023, 2024], f"rated years {ct.get('loss_ratio_years')}")
+    check(abs(ct["loss_ratio_written"] - (5000 + 9000) / 50000) < 1e-9, f"all-years ratio {ct}")
+    check(ct["premium_basis"] == "written" and "premium_note" in ct, "written basis not labeled")
+    check(c["flag_counts"].get("premium_missing_lines") == 1, f"flags {c['flag_counts']}")
+    check(ct["claims"] == 5 and c["flag_counts"].get("duplicate_claim") == 1,
+          "undated duplicate not handled without crashing")
+
+    run([RET, "cov.csv", "--retentions", "5000", "--lines", "WC", "--out", "cov_ret"], tmp)
+    cr = json.loads((tp / "cov_ret.json").read_text())["summary"][0]
+    check(cr["years"] == 3 and round(cr["avg_annual_retained_all_years"]) == 1000,
+          f"zero-claim year not counted: {cr}")
+
+    (tp / "blank.csv").write_text("Year,Loss ratio\n2022,0.5\n2023,\n2024,0.4\n")
+    run([CHART, "blank.csv", "--title", "Gap for unknown", "--format", "percent", "--labels",
+         "--out", "blank"], tmp)
+    check((tp / "blank.png").exists(), "blank-cell chart failed")
+
     (tp / "neg.csv").write_text("Item,Change\nA,500\nB,-300\nC,200\n")
     run([CHART, "neg.csv", "--title", "Credits shown", "--out", "neg"], tmp)
     check((tp / "neg.png").exists(), "negative-value chart failed")

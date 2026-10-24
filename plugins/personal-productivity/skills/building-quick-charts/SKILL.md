@@ -18,7 +18,7 @@ Produce a chart image the user can paste anywhere. One chart, one message.
 
 ## Workflow
 
-1. **Get the data into a CSV.** If the user pasted a table or numbers, write them to a CSV with a header row. First column is the category or period. Each further column is one series.
+1. **Get the data into a CSV.** If the user pasted a table or numbers, write them to a CSV with a header row. First column is the category or period. Each further column is one series. Leave unknown values blank. Bar and line charts show a gap for a blank, never a zero. Stacked charts draw a blank as zero and print a note; say so on the slide.
 2. **Pick the type.**
    - Bar: compare categories or a few periods. Default.
    - Line: a trend over 6 or more periods.

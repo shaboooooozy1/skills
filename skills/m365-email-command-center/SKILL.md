@@ -1,6 +1,6 @@
 ---
 name: m365-email-command-center
-description: Plan, draft, triage, and operationalize Microsoft 365 work email communication. Use when asked to manage Outlook-style inbox workflows, prioritize messages, draft replies, build follow-up plans, convert threads into action items, or create reusable email templates for team, stakeholder, and executive communication. For the wording of a single message in the user's own voice, prefer churchill-hemingway-engine.
+description: Plans, triages, and operationalizes Microsoft 365 work email at the inbox level. Use when asked to manage Outlook-style inbox workflows across many messages, prioritize a backlog, batch-draft replies to a set of threads, build follow-up plans, convert threads into action items, or build reusable template libraries for team, stakeholder, and executive communication. Not for writing or editing one message; churchill-hemingway-engine handles single-message wording.
 ---
 
 # M365 Email Command Center

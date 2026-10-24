@@ -59,7 +59,7 @@ def load(path, basis, notes):
     df["line"] = df["line"].str.strip().str.upper()
     df["policy_year"] = pd.to_numeric(df["policy_year"], errors="coerce").astype("Int64")
     # latest valuation per claim; rows missing carrier or claim number are never merged together
-    df = df.sort_values("valuation_date")
+    df = df.sort_values("valuation_date", na_position="first")  # undated rows never win over dated ones
     no_id = df["claim_number"].str.strip().eq("") | df["carrier"].str.strip().eq("")
     df = pd.concat([df[no_id], df[~no_id].drop_duplicates(subset=["carrier", "claim_number"], keep="last")])
     if no_id.any():
@@ -94,6 +94,8 @@ def main():
     ap.add_argument("--lines", help="Comma-separated line codes to include, e.g. AL,GL. Default all.")
     ap.add_argument("--basis", choices=["incurred", "loss_only"], default="incurred",
                     help="incurred = loss + expense less recoveries; loss_only excludes ALAE")
+    ap.add_argument("--years", help="Policy years the loss runs cover, e.g. 2021-2025. Default: every year in "
+                    "claims.csv before the line filter. Years with no claims count as zero retained.")
     ap.add_argument("--immature-years", help="Comma-separated policy years to mark immature, e.g. 2024,2025")
     ap.add_argument("--out", default="retention")
     a = ap.parse_args()
@@ -108,13 +110,30 @@ def main():
     immature = {int(y) for y in a.immature_years.split(",")} if a.immature_years else set()
 
     df = load(a.claims, a.basis, notes)
+    # Year range comes from the whole file (or --years), before the line filter, so a year
+    # with no claims in the selected lines still counts as a zero-retained year.
+    if a.years:
+        try:
+            lo, _, hi = a.years.partition("-")
+            years = list(range(int(lo), int(hi or lo) + 1))
+        except ValueError:
+            sys.exit("--years must look like 2021-2025 or 2024")
+    else:
+        years = sorted(int(y) for y in df["policy_year"].dropna().unique())
+    outside = df[~df["policy_year"].isin(years)]
+    if len(outside):
+        notes.append(f"{len(outside)} claim(s) fall outside --years and were left out.")
+        df = df[df["policy_year"].isin(years)]
     if a.lines:
         keep = {x.strip().upper() for x in a.lines.split(",")}
         df = df[df["line"].isin(keep)]
         notes.append(f"Lines included: {', '.join(sorted(keep))}.")
-    if df.empty:
-        sys.exit("No claims left after filtering.")
-    years = sorted(int(y) for y in df["policy_year"].dropna().unique())
+    if not years:
+        sys.exit("No policy years found.")
+    empty_years = [y for y in years if not (df["policy_year"] == y).any()]
+    if empty_years:
+        notes.append(f"No claims in {', '.join(map(str, empty_years))} for the selected lines. Counted as zero "
+                     "retained. Confirm the loss runs cover those years.")
 
     rows, piercing = [], []
     for i, ret in enumerate(rets):

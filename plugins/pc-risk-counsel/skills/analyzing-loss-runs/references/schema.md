@@ -51,11 +51,11 @@ Number formatting: strip `$` and commas. Parentheses mean negative: `(1,250)` â†
 | Column | Required | Notes |
 |---|---|---|
 | policy_year | yes | Same convention as claims.csv |
-| line | yes | Same codes. Use ALL for a package premium that cannot be split. |
+| line | yes | Same codes. Use ALL for a package premium that cannot be split. ALL means premium for every line **not** listed separately that year, so ALL and per-line rows add together. |
 | earned_premium | yes | Earned, not written, when available |
-| premium_basis | no | `earned` or `written`. The script labels loss ratios accordingly. |
+| premium_basis | no | `earned` or `written`. When any row says `written`, outputs rename the columns to `written_premium` and `loss_ratio_written` (or `mixed_â€¦`) and the JSON totals carry a `premium_note`. |
 
-Loss ratios are computed only where premium exists for that year and line, or for the year in total when premium is given as ALL.
+Loss ratios are computed only where premium covers the losses: per year and line when that line has premium; per year when every line with claims that year has premium or an ALL row exists. The all-years ratio uses only those covered years and lists them in `loss_ratio_years`. Years left out get a `premium_missing_lines` flag.
 
 ## Extraction tips
 

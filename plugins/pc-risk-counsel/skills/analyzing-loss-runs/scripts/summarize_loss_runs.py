@@ -90,16 +90,28 @@ def dedupe(df, flags):
         if len(g) == 1:
             keep.append(g.index[0])
             continue
-        latest_date = g["valuation_date"].max()
-        latest = g[g["valuation_date"] == latest_date]
+        dated = g[g["valuation_date"].notna()]
+        if dated.empty:
+            # No readable valuation date on any row: keep the first, flag the rest. Never guess order.
+            for _, r in g.iloc[1:].iterrows():
+                flag(flags, r, "duplicate_claim",
+                     f"Claim appears {len(g)} times with no readable valuation date. Kept row "
+                     f"{int(g.iloc[0]['_row'])}. Confirm which report is current.")
+            keep.append(g.index[0])
+            continue
+        latest_date = dated["valuation_date"].max()
+        latest = dated[dated["valuation_date"] == latest_date]
         if len(latest) > 1:
             for _, r in latest.iloc[1:].iterrows():
                 flag(flags, r, "duplicate_claim",
                      f"Same claim and valuation date appears {len(latest)} times. Kept row {int(latest.iloc[0]['_row'])}.")
-        older = g[g["valuation_date"] != latest_date]
-        for _, r in older.iterrows():
-            flag(flags, r, "superseded_valuation",
-                 f"Older valuation dropped. Kept valuation {latest_date.date()}.")
+        for i, r in g.drop(index=latest.index).iterrows():
+            if pd.isna(r["valuation_date"]):
+                flag(flags, r, "undated_duplicate",
+                     f"Row has no readable valuation date. Kept the dated valuation {latest_date.date()}.")
+            elif i not in latest.index:
+                flag(flags, r, "superseded_valuation",
+                     f"Older valuation dropped. Kept valuation {latest_date.date()}.")
         keep.append(latest.index[0])
     return df.loc[keep].sort_values(["policy_year", "line", "loss_date"])
 
@@ -182,7 +194,7 @@ def check_valuations(df, flags, as_of, stale_days):
                           "detail": f"Report valued {vdate.date()}, {age} days before {as_of}. Request current loss runs."})
 
 
-def summarize(df, group_cols, premium, large):
+def summarize(df, group_cols, premium, large, ypremium=None):
     g = df.groupby(group_cols, dropna=False)
     out = pd.DataFrame({
         "claims": g.size(),
@@ -196,16 +208,46 @@ def summarize(df, group_cols, premium, large):
         "latest_valuation": g["valuation_date"].max().dt.date,
     }).reset_index()
     if premium is not None:
-        out = attach_premium(out, group_cols, premium)
+        out = attach_premium(out, group_cols, premium, ypremium)
     return out
 
 
-def attach_premium(out, group_cols, premium):
+def year_premium(df, premium, flags):
+    """Premium per policy year, and whether it covers every line with claims that year.
+
+    Per-line rows are summed. An ALL row means premium for lines not listed separately (a package),
+    so ALL and per-line rows add without double counting. Without an ALL row, a year's loss ratio
+    is computed only when every line with claims that year has premium.
+    """
+    rows = []
+    claim_lines = df.groupby("policy_year")["line"].apply(set)
+    for py in sorted(set(premium["policy_year"].dropna()) | set(claim_lines.index.dropna())):
+        prem = premium[premium["policy_year"] == py]
+        has_all = (prem["line"] == "ALL").any()
+        prem_lines = set(prem.loc[prem["line"] != "ALL", "line"])
+        missing = sorted(claim_lines.get(py, set()) - prem_lines) if not has_all else []
+        total = prem["earned_premium"].sum(min_count=1)
+        if has_all and prem_lines:
+            flags.append({"row": None, "carrier": "", "claim_number": f"(policy year {int(py)})",
+                          "flag": "premium_all_and_lines",
+                          "detail": f"Premium has an ALL row and per-line rows ({', '.join(sorted(prem_lines))}). "
+                                    "They were added. Confirm ALL excludes the listed lines."})
+        if missing and pd.notna(total):
+            flags.append({"row": None, "carrier": "", "claim_number": f"(policy year {int(py)})",
+                          "flag": "premium_missing_lines",
+                          "detail": f"No premium for {', '.join(missing)}. Year loss ratio not computed."})
+        rows.append({"policy_year": py, "earned_premium": total, "premium_complete": not missing})
+    out = pd.DataFrame(rows)
+    out["policy_year"] = out["policy_year"].astype("Int64")
+    return out
+
+
+def attach_premium(out, group_cols, premium, ypremium=None):
     """Sum premium per group (several policies or carriers can share a year and line), then
     outer-join so a premium-only group (a zero-loss year or line) still appears with zero losses."""
     if group_cols == ["policy_year"]:
-        p = premium.groupby("policy_year", as_index=False)["earned_premium"].sum(min_count=1)
-    elif group_cols in (["policy_year", "line"], ["line"]):
+        p = ypremium
+    elif group_cols == ["policy_year", "line"]:
         p = (premium[premium["line"] != "ALL"]
              .groupby(group_cols, as_index=False)["earned_premium"].sum(min_count=1))
     else:
@@ -219,7 +261,21 @@ def attach_premium(out, group_cols, premium):
     out.loc[zero, ["paid", "outstanding"]] = 0.0
     out = out.sort_values(group_cols).reset_index(drop=True)
     out["loss_ratio"] = out["incurred"] / out["earned_premium"]
-    out.loc[out["earned_premium"].isna() | (out["earned_premium"] == 0), "loss_ratio"] = float("nan")
+    no_ratio = out["earned_premium"].isna() | (out["earned_premium"] == 0)
+    if "premium_complete" in out:
+        no_ratio |= ~out["premium_complete"].fillna(False).astype(bool)
+    out.loc[no_ratio, "loss_ratio"] = float("nan")
+    return out
+
+
+def line_ratios(by_line, by_year_line):
+    """Line loss ratio over the policy years that have premium for that line only."""
+    rated = by_year_line[by_year_line["earned_premium"].notna()]
+    g = rated.groupby("line").agg(earned_premium=("earned_premium", "sum"),
+                                  incurred_in_rated_years=("incurred", "sum"),
+                                  rated_years=("policy_year", lambda s: ", ".join(str(int(y)) for y in sorted(s))))
+    out = by_line.merge(g.reset_index(), on="line", how="left")
+    out["loss_ratio"] = out["incurred_in_rated_years"] / out["earned_premium"].where(out["earned_premium"] != 0)
     return out
 
 
@@ -301,10 +357,15 @@ def main():
         premium["policy_year"] = pd.to_numeric(premium["policy_year"], errors="coerce").astype("Int64")
         premium["line"] = premium["line"].str.strip().str.upper()
         premium["earned_premium"] = premium["earned_premium"].map(to_number)
+        bases = set(premium.get("premium_basis", pd.Series(dtype=str)).str.strip().str.lower()) - {""}
+        basis = "earned" if bases <= {"earned"} else ("written" if bases == {"written"} else "mixed")
 
-    by_year = add_maturity(summarize(df, ["policy_year"], premium, a.large_loss), df)
+    ypremium = year_premium(df, premium, flags) if premium is not None else None
+    by_year = add_maturity(summarize(df, ["policy_year"], premium, a.large_loss, ypremium), df)
     by_year_line = summarize(df, ["policy_year", "line"], premium, a.large_loss)
-    by_line = summarize(df, ["line"], premium, a.large_loss)
+    by_line = summarize(df, ["line"], None, a.large_loss)
+    if premium is not None:
+        by_line = line_ratios(by_line, by_year_line)
 
     total_inc = df["incurred"].sum()
     cols = ["carrier", "policy_year", "line", "claim_number", "loss_date", "status", "cause",
@@ -339,9 +400,20 @@ def main():
         "incurred_from_carrier_total_only": int((df["incurred_source"] == "carrier").sum()),
     }
     if premium is not None:
-        ep = float(premium["earned_premium"].sum())
-        totals["earned_premium"] = ep
-        totals["loss_ratio"] = float(total_inc / ep) if ep else None
+        # All-years ratio uses only the years whose premium covers every line with claims.
+        rated = by_year[by_year["loss_ratio"].notna()]
+        ep, inc = float(rated["earned_premium"].sum()), float(rated["incurred"].sum())
+        totals["premium_basis"] = basis
+        totals["earned_premium"] = float(premium["earned_premium"].sum())
+        totals["loss_ratio"] = inc / ep if ep else None
+        totals["loss_ratio_years"] = [int(y) for y in rated["policy_year"]]
+        if basis != "earned":
+            note = f"{basis} premium"
+            totals["premium_note"] = (f"Premium basis is {note}. Loss ratios use {note}, not earned premium. "
+                                      "Label them that way in any narrative.")
+            ren = {"earned_premium": f"{basis}_premium", "loss_ratio": f"loss_ratio_{basis}"}
+            by_year, by_year_line, by_line = (f.rename(columns=ren) for f in (by_year, by_year_line, by_line))
+            totals = {ren.get(k, k): v for k, v in totals.items()}
 
     write_xlsx(f"{a.out}.xlsx", {
         "Summary_by_Year": by_year,
@@ -376,8 +448,9 @@ def main():
 
     print(f"Claims: {totals['claims']} ({totals['open_claims']} open) | Incurred: ${totals['incurred']:,.0f} "
           f"| Large losses >= ${a.large_loss:,.0f}: {totals['claims_over_threshold']}")
-    if premium is not None and totals.get("loss_ratio") is not None:
-        print(f"Loss ratio (all years): {totals['loss_ratio']:.1%}")
+    lr_key = next((k for k in totals if k.startswith("loss_ratio") and k != "loss_ratio_years"), None)
+    if lr_key and totals[lr_key] is not None:
+        print(f"Loss ratio ({lr_key}, years {totals['loss_ratio_years']}): {totals[lr_key]:.1%}")
     print(f"Data flags: {len(flags_df)} {dict(report['flag_counts'])}")
     print(f"Wrote {a.out}.xlsx and {a.out}.json")
 
