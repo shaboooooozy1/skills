@@ -415,8 +415,8 @@ with tempfile.TemporaryDirectory() as tmp:
         "T,2024.5,GL,G1,2024-03-01,closed,100,0,2026-09-30\nT,2024,GL,G2,2024-03-01,closed,200,0,2026-09-30\n")
     run([LR, "frac.csv", "--as-of", "2026-10-24", "--out", "frac"], tmp)
     check((tp / "frac.json").exists(), "fractional policy year crashed the loss-run script")
-    run([RET, "frac.csv", "--retentions", "1000", "--immature-years", "none", "--out", "frac_ret"], tmp)
-    check((tp / "frac_ret.json").exists(), "fractional policy year crashed the replay")
+    check(fails([RET, "frac.csv", "--retentions", "1000", "--immature-years", "none"], "unreadable policy_year"),
+          "fractional policy year crashed or was dropped by the replay")
     (tp / "sep.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
         'T,2024,GL,G1,2024-03-01,closed,"12,34",0,2026-09-30\nT,2024,GL,G2,2024-03-01,closed,1(2),0,2026-09-30\n'
         'T,2024,GL,G3,2024-03-01,closed,"$1,250.50",(0),2026-09-30\nT,2024,GL,G4,2024-03-01,closed,"($1,000)",0,2026-09-30\n')
@@ -559,9 +559,8 @@ with tempfile.TemporaryDirectory() as tmp:
     check(fails([RET, "shift.csv", "--retentions", "1000"], "different number of fields"), "replay accepted shifted row")
     (tp / "yr5.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
         "T,20245,GL,Y5,2024-03-01,closed,100,0,2026-09-30\nT,2024,GL,Y6,2024-03-01,closed,200,0,2026-09-30\n")
-    run([RET, "yr5.csv", "--retentions", "1000", "--immature-years", "none", "--out", "yr5"], tmp)
-    yrs = [r["policy_year"] for r in json.loads((tp / "yr5.json").read_text())["by_year"]]
-    check(yrs == [2024], f"policy year 20245 became a replay year: {yrs}")
+    check(fails([RET, "yr5.csv", "--retentions", "1000", "--immature-years", "none"], "unreadable policy_year"),
+          "claim with policy year 20245 replayed or silently dropped")
     run([LR, "yr5.csv", "--as-of", "2026-10-24", "--out", "yr5_lr"], tmp)
     y5 = json.loads((tp / "yr5_lr.json").read_text()) if (tp / "yr5_lr.json").exists() else {"flag_counts": {}}
     check(y5["flag_counts"].get("missing_field") == 1,
@@ -700,6 +699,12 @@ with tempfile.TemporaryDirectory() as tmp:
         check(fails([CHART, "sgn.csv", "--title", "x"], "Non-numeric"), f"chart value {bad} crashed")
         (tp / "tc_sgn.json").write_text(json.dumps({"periods": [{"label": "P", "premiums": bad}]}))
         check(fails([TCOR, "tc_sgn.json"], "Not a number"), f"TCOR value {bad} crashed")
+
+    # Codex round on 1b0f669.
+    (tp / "emp_prem.csv").write_text("policy_year,line,earned_premium\n")
+    run([LR, "mm.csv", "--premium", "emp_prem.csv", "--as-of", "2026-10-24", "--out", "emp"], tmp)
+    check(json.loads((tp / "emp.json").read_text())["totals"]["earned_premium"] is None,
+          "empty premium file reported as $0 premium")
 
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(

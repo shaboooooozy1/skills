@@ -643,7 +643,7 @@ def main():
         ep, inc = float(rated["earned_premium"].sum()), float(rated["incurred"].sum())
         totals["premium_basis"] = basis
         totals["earned_premium"] = (float(premium["earned_premium"].sum())
-                                    if premium["earned_premium"].notna().all() else None)
+                                    if len(premium) and premium["earned_premium"].notna().all() else None)
         totals["loss_ratio"] = inc / ep if ep else None
         totals["loss_ratio_years"] = [int(y) for y in rated["policy_year"]]
         if basis != "earned":

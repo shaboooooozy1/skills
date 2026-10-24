@@ -298,6 +298,11 @@ def main():
 
     df = load(a.claims)
     had_recoveries = bool(df["_has_recoveries_col"].iloc[0]) if len(df) else True
+    noyear = df[df["policy_year"].isna()]
+    if len(noyear):
+        # a blank or unreadable year (e.g. 20245) would otherwise fall outside the year range and vanish
+        sys.exit(f"Claim(s) {', '.join(noyear['claim_number'].replace('', '(blank)'))} have a blank or unreadable "
+                 "policy_year. Fix them before replaying.")
     odd = df[~df["line"].isin(LINE_CODES)]
     if len(odd):
         # checked before any --lines filter, so a typo like WCC can never vanish from a WC replay
