@@ -428,7 +428,8 @@ def line_ratios(by_line, by_year_line):
     """Line loss ratio over the policy years that have premium for that line only."""
     known = by_year_line[by_year_line["earned_premium"].notna()]
     rated = known[known["earned_premium"] > 0]  # a zero-premium year cannot be rated
-    lines = pd.DataFrame({"line": pd.Series(sorted(set(known["line"])), dtype=object)})  # every premium line stays
+    # every line in the year-line table stays, including premium-only lines whose amount is unknown
+    lines = pd.DataFrame({"line": pd.Series(sorted(set(by_year_line["line"].dropna())), dtype=object)})
     g = rated.groupby("line").agg(earned_premium=("earned_premium", "sum"),
                                   incurred_in_rated_years=("incurred", "sum"),
                                   rated_years=("policy_year", lambda s: ", ".join(str(int(y)) for y in sorted(s))))

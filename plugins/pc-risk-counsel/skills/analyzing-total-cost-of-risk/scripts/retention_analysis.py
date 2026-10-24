@@ -181,6 +181,9 @@ def load(path):
     keys = list(zip(df["carrier"], df["claim_number"]))
     df["_ambiguous"] = [k in ambiguous for k in keys]
     df["_tied"] = [k in tied for k in keys]
+    # a dated row won over an undated duplicate: keep a marker, the undated row may be the newer report
+    dropped_undated = set(undated_dups[["carrier", "claim_number"]].itertuples(index=False, name=None)) - ambiguous
+    df["_undated_dropped"] = [k in dropped_undated for k in keys]
     return df
 
 
@@ -192,6 +195,10 @@ def amounts(df, basis, notes):
         notes.append(f"{len(amb)} claim(s) appear more than once with no readable valuation date "
                      f"({', '.join(amb['claim_number'])}). Kept one row each without knowing which is "
                      "current. Confirm against the carrier reports.")
+    dropped = sorted(set(df.loc[df["_undated_dropped"], "claim_number"]))
+    if dropped:
+        notes.append(f"{len(dropped)} claim(s) also have a row with no readable valuation date ({', '.join(dropped)}). "
+                     "Used the dated row. If the undated row is the newer report, these amounts are understated.")
     tied = sorted(set(df.loc[df["_tied"], "claim_number"]))
     if tied:
         notes.append(f"{len(tied)} claim(s) have two rows with the same latest valuation date "
@@ -356,7 +363,8 @@ def main():
     rows, piercing = [], []
     for i, ret in enumerate(rets):
         agg = aggs[i] if aggs else None
-        option = f"${ret:,.0f}" + (f" / ${agg:,.0f} agg" if agg is not None else "")
+        # .10g keeps cents when given (5,000.1 vs 5,000.2) and shows whole dollars without decimals
+        option = f"${ret:,.10g}" + (f" / ${agg:,.10g} agg" if agg is not None else "")
         for y in years:
             g = df[df["policy_year"] == y]
             per_claim = g["amount"].clip(upper=ret)

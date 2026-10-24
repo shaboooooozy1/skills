@@ -21,7 +21,13 @@ failures = []
 def run(args, cwd):
     r = subprocess.run([sys.executable, "-I", *map(str, args)], cwd=cwd, capture_output=True, text=True)
     if r.returncode:
-        failures.append(f"{Path(args[0]).name} exited {r.returncode}: {r.stderr[-400:]}")
+        # Stop here: later checks read this command's output, so continuing would only raise
+        # FileNotFoundError and hide the real error below.
+        failures.append(f"{Path(args[0]).name} {' '.join(map(str, args[1:]))} exited {r.returncode}: {r.stderr[-800:]}")
+        print("FAILED")
+        for f in failures:
+            print(" -", f)
+        sys.exit(1)
     return r
 
 
@@ -760,6 +766,31 @@ with tempfile.TemporaryDirectory() as tmp:
     r = subprocess.run([sys.executable, "-I", str(mv / "scripts/validate_skills.py"), "--only", "plugins"],
                        capture_output=True, text=True)
     check("Traceback" not in r.stderr and "metadata" in r.stdout, f"string metadata crashed the validator: {r.stderr[-200:]}")
+
+    # Codex round on 99befac.
+    (tp / "umb_prem.csv").write_text("policy_year,line,earned_premium\n2024,GL,1000\n2024,UMB,\n")
+    run([LR, "mm.csv", "--premium", "umb_prem.csv", "--as-of", "2026-10-24", "--out", "umb"], tmp)
+    ul = [r["line"] for r in json.loads((tp / "umb.json").read_text())["by_line"]]
+    check("UMB" in ul, f"premium-only line with unknown amount dropped from by_line: {ul}")
+    (tp / "udd.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\nT,2024,GL,U1,2024-03-01,open,100,0,2026-06-30\nT,2024,GL,U1,2024-03-01,open,100,9000,\n")
+    run([RET, "udd.csv", "--retentions", "1000", "--immature-years", "none", "--out", "udd"], tmp)
+    ud = " ".join(json.loads((tp / "udd.json").read_text())["notes"])
+    check("U1" in ud and "no readable valuation date" in ud, f"discarded undated duplicate not noted: {ud}")
+    run([RET, "f8r.csv", "--retentions", "5000.1,5000.2", "--immature-years", "none", "--out", "fr"], tmp)
+    labels = [s["option"] for s in json.loads((tp / "fr.json").read_text())["summary"]]
+    check(len(set(labels)) == 2, f"fractional retention options share a label: {labels}")
+    pv = tp / "pv"
+    (pv / "scripts").mkdir(parents=True)
+    (pv / "skills/skill-creator/scripts").mkdir(parents=True)
+    (pv / "plugins/p/.claude-plugin").mkdir(parents=True)
+    (pv / ".claude-plugin").mkdir()
+    (pv / ".claude-plugin/marketplace.json").write_text('{"name": "t", "plugins": []}')
+    (pv / "plugins/p/.claude-plugin/plugin.json").write_text("[]")
+    (pv / "scripts/validate_skills.py").write_text((ROOT / "scripts/validate_skills.py").read_text())
+    (pv / "skills/skill-creator/scripts/quick_validate.py").write_text(
+        (ROOT / "skills/skill-creator/scripts/quick_validate.py").read_text())
+    r = subprocess.run([sys.executable, "-I", str(pv / "scripts/validate_skills.py")], capture_output=True, text=True)
+    check("Traceback" not in r.stderr and "must be a JSON object" in r.stdout, f"list plugin.json crashed: {r.stderr[-200:]}")
 
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(

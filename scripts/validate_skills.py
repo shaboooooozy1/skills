@@ -115,7 +115,10 @@ def main():
     for pj in sorted((ROOT / "plugins").glob("*/.claude-plugin/plugin.json")):
         try:
             data = json.loads(pj.read_text())
-            if data.get("name") != pj.parent.parent.name:
+            if not isinstance(data, dict):
+                print(f"FAIL {pj.relative_to(ROOT)}: must be a JSON object")
+                failed += 1
+            elif data.get("name") != pj.parent.parent.name:
                 print(f"FAIL {pj.relative_to(ROOT)}: name != folder")
                 failed += 1
         except json.JSONDecodeError as e:
