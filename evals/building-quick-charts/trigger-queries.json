@@ -1,0 +1,38 @@
+[
+  {
+    "query": "Make this a bar chart: 2022 $412K, 2023 $455K, 2024 $498K",
+    "should_trigger": true
+  },
+  {
+    "query": "Chart the loss ratio trend for the stewardship deck",
+    "should_trigger": true
+  },
+  {
+    "query": "I need a graph of paid vs reserved by year for a slide",
+    "should_trigger": true
+  },
+  {
+    "query": "Visual of premium history I can paste into PowerPoint",
+    "should_trigger": true
+  },
+  {
+    "query": "Plot claim frequency by year",
+    "should_trigger": true
+  },
+  {
+    "query": "Build an interactive KPI dashboard with filters",
+    "should_trigger": false
+  },
+  {
+    "query": "Make me a 10-slide stewardship deck",
+    "should_trigger": false
+  },
+  {
+    "query": "What formula totals column F by column C?",
+    "should_trigger": false
+  },
+  {
+    "query": "Prototype a COI tracker app",
+    "should_trigger": false
+  }
+]

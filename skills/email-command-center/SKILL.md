@@ -1,6 +1,10 @@
 ---
 name: email-command-center
-description: Centralized workflow for managing email-heavy work: triaging inboxes, drafting and refining replies, generating follow-ups, summarizing threads, extracting action items, and preparing outreach sequences. Use this skill whenever users ask for help processing, composing, or organizing email communication.
+description: >-
+  Centralized workflow for managing email-heavy work: triaging inboxes, summarizing threads,
+  extracting action items, generating follow-up plans, and preparing outreach sequences. Use when
+  the user asks for help processing or organizing many emails at once. For the wording of a single
+  message in the user's own voice, prefer churchill-hemingway-engine.
 ---
 
 # Email Command Center

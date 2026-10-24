@@ -1,0 +1,24 @@
+carrier,policy_number,policy_year,policy_effective,line,claim_number,loss_date,status,paid_loss,paid_expense,outstanding_loss,outstanding_expense,recoveries,carrier_incurred,valuation_date,cause,claim_type
+Example Mutual,WC-1001,2021,2021-07-01,WC,W21-001,2021-09-14,closed,"$4,210",350,0,0,,4560,2026-08-31,strain - lifting,medical-only
+Example Mutual,WC-1001,2021,2021-07-01,WC,W21-002,2022-02-03,closed,38500,6200,0,0,,44700,2026-08-31,fall from ladder,indemnity
+Example Mutual,WC-1001,2021,2021-07-01,WC,W21-003,2022-05-20,closed,1250,0,0,0,,1250,2026-08-31,laceration,medical-only
+Example Mutual,WC-1002,2022,2022-07-01,WC,W22-001,2022-11-08,closed,2890,0,0,0,,2890,2026-08-31,strain - lifting,medical-only
+Example Mutual,WC-1002,2022,2022-07-01,WC,W22-002,2023-03-17,open,61200,8400,45000,7500,,122100,2026-08-31,caught in machine,indemnity
+Example Mutual,WC-1003,2023,2023-07-01,WC,W23-001,2023-08-22,closed,980,0,0,0,,980,2026-08-31,eye injury,medical-only
+Example Mutual,WC-1003,2023,2023-07-01,WC,W23-002,2024-01-09,open,3400,0,0,0,,3400,2026-08-31,strain - lifting,indemnity
+Example Mutual,WC-1003,2023,2023-07-01,WC,W23-003,2024-04-30,closed,2100,0,1500,0,,3600,2026-08-31,strain - lifting,medical-only
+Example Mutual,WC-1004,2024,2024-07-01,WC,W24-001,2024-10-02,open,7800,900,22000,3000,,33700,2026-08-31,strain - lifting,indemnity
+Example Mutual,WC-1005,2025,2025-07-01,WC,W25-001,2025-09-12,open,1100,0,6500,500,,8100,2026-08-31,laceration,medical-only
+Sample Casualty Co,GL-77,2021,2021-07-01,GL,G-0091,2021-12-02,closed,0,2400,0,0,,2400,2026-03-31,slip and fall - customer,BI
+Sample Casualty Co,GL-77,2022,2022-07-01,GL,G-0145,2023-01-15,closed,18000,9500,0,0,,27500,2026-03-31,product damage claim,PD
+Sample Casualty Co,GL-77,2024,2024-07-01,GL,G-0302,2025-02-11,open,0,4100,40000,15000,,59100,2026-03-31,slip and fall - customer,BI
+Sample Casualty Co,AL-55,2021,2021-07-01,AL,A-1001,2021-08-30,closed,12400,800,0,0,2000,11200,2026-03-31,rear-end - insured at fault,PD
+Sample Casualty Co,AL-55,2022,2022-07-01,AL,A-1044,2022-10-19,closed,185000,22000,0,0,,207000,2026-03-31,intersection collision,BI
+Sample Casualty Co,AL-55,2023,2023-07-01,AL,A-1102,2023-12-05,closed,9800,0,0,0,,10500,2026-03-31,backing,PD
+Sample Casualty Co,AL-55,2023,2023-07-01,AL,A-1131,2024-03-28,open,45000,12000,95000,20000,,172000,2026-03-31,intersection collision,BI
+Sample Casualty Co,AL-55,2024,2024-07-01,AL,A-1210,2024-09-09,open,6000,0,14000,0,,20000,2025-12-31,rear-end - insured at fault,PD
+Sample Casualty Co,AL-55,2024,2024-07-01,AL,A-1210,2024-09-09,open,8200,600,11000,1000,,20800,2026-03-31,rear-end - insured at fault,PD
+Sample Casualty Co,AL-55,2024,2024-07-01,AL,A-1255,2026-01-14,closed,3000,0,0,0,,3000,2026-03-31,backing,PD
+Sample Casualty Co,AL-55,2025,2025-07-01,AL,A-1301,2025-11-20,open,,,,,,64000,2026-03-31,intersection collision,BI
+Sample Casualty Co,AL-55,2025,2025-07-01,AL,A-1302,2026-02-02,open,0,0,0,0,,0,2026-03-31,record only,PD
+Sample Casualty Co,AL-55,2025,2025-07-01,AL,A-1302,2026-02-02,open,0,0,0,0,,0,2026-03-31,record only,PD

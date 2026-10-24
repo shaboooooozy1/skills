@@ -1,12 +1,12 @@
 {
-  "name": "anthropic-agent-skills",
+  "name": "bloomstine-skills",
   "owner": {
-    "name": "Keith Lazuka",
-    "email": "klazuka@anthropic.com"
+    "name": "Will Bloomstine",
+    "url": "https://github.com/shaboooooozy1"
   },
   "metadata": {
-    "description": "Anthropic example skills",
-    "version": "1.0.0"
+    "description": "Will Bloomstine's Claude skills (broker voice, P&C risk counsel, productivity) plus a fork of Anthropic's example skills",
+    "version": "2.0.0"
   },
   "plugins": [
     {
@@ -50,6 +50,21 @@
       "skills": [
         "./skills/apollo-enrich-lead"
       ]
+    },
+    {
+      "name": "broker-voice",
+      "description": "Churchill-Hemingway writing engine for commercial insurance broker communications: draft and edit modes, templates, compliance guardrails.",
+      "source": "./plugins/broker-voice"
+    },
+    {
+      "name": "pc-risk-counsel",
+      "description": "Commercial P&C risk-counsel workflows: loss-run normalization and summary, Total Cost of Risk, and deductible/SIR retention replay. Deterministic scripts, review-gated output.",
+      "source": "./plugins/pc-risk-counsel"
+    },
+    {
+      "name": "personal-productivity",
+      "description": "Everyday power-user skills: Excel/Sheets formulas and SQL, presentation-ready charts, UI prototypes, and prompt/Project/Skill setup design.",
+      "source": "./plugins/personal-productivity"
     }
   ]
 }

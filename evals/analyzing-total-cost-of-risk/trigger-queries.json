@@ -1,0 +1,46 @@
+[
+  {
+    "query": "What is this client really spending on risk, not just premium?",
+    "should_trigger": true
+  },
+  {
+    "query": "Compare guaranteed cost to a $250K large deductible for auto",
+    "should_trigger": true
+  },
+  {
+    "query": "Should they take a higher WC deductible?",
+    "should_trigger": true
+  },
+  {
+    "query": "Build a TCOR per $1,000 of revenue for the last three years",
+    "should_trigger": true
+  },
+  {
+    "query": "How much would they have kept under a $50K SIR?",
+    "should_trigger": true
+  },
+  {
+    "query": "Where does this account sit on the risk financing continuum?",
+    "should_trigger": true
+  },
+  {
+    "query": "Total these loss runs by year",
+    "should_trigger": false
+  },
+  {
+    "query": "Benefits renewal came in at +14%, what are our options?",
+    "should_trigger": false
+  },
+  {
+    "query": "Draft an email to the CFO",
+    "should_trigger": false
+  },
+  {
+    "query": "Give me a SUMIFS formula",
+    "should_trigger": false
+  },
+  {
+    "query": "What is a captive insurance company?",
+    "should_trigger": false
+  }
+]
