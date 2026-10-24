@@ -171,9 +171,9 @@ def check_rows(df, flags):
         for c in MONEY:
             if pd.notna(r[c]) and r[c] < 0 and c != "recoveries":
                 flag(flags, r, "negative_amount", f"{c} = {r[c]:,.0f}.")
-        if r["status"] in {"open", "reopened"} and r["incurred_source"] == "computed" and r["outstanding"] == 0:
+        if r["status"] in {"open", "reopened"} and pd.notna(r["outstanding"]) and r["outstanding"] == 0:
             flag(flags, r, "open_zero_reserve", "Open claim carries no reserve. Ask the carrier.")
-        if r["status"] == "closed" and r["incurred_source"] == "computed" and r["outstanding"] > 0:
+        if r["status"] == "closed" and pd.notna(r["outstanding"]) and r["outstanding"] > 0:
             flag(flags, r, "closed_with_reserve", f"Closed claim still shows {r['outstanding']:,.0f} outstanding.")
         if pd.notna(r["loss_date"]):
             if pd.notna(r["policy_effective"]):
@@ -296,7 +296,7 @@ def attach_premium(out, group_cols, premium, ypremium=None):
 
 def line_ratios(by_line, by_year_line):
     """Line loss ratio over the policy years that have premium for that line only."""
-    rated = by_year_line[by_year_line["earned_premium"].notna()]
+    rated = by_year_line[by_year_line["earned_premium"].notna() & (by_year_line["earned_premium"] > 0)]
     g = rated.groupby("line").agg(earned_premium=("earned_premium", "sum"),
                                   incurred_in_rated_years=("incurred", "sum"),
                                   rated_years=("policy_year", lambda s: ", ".join(str(int(y)) for y in sorted(s))))
@@ -312,29 +312,46 @@ def line_ratios(by_line, by_year_line):
 
 
 def add_maturity(by_year, df):
-    """Months from term start to latest valuation. Without a policy_effective date, assume the
-    latest possible start (Dec 1 of the policy year) so maturity is never overstated. Unknown
-    maturity counts as immature."""
-    starts = df.groupby("policy_year")["policy_effective"].min()
+    """Months of development per policy year, taken as the LEAST mature record in that year.
+
+    Each policy (carrier + policy number + effective date) is measured on its own: from its term
+    start to its latest valuation. The year gets the minimum, so one late-starting or early-valued
+    policy keeps the year immature. Without a policy_effective date the start is assumed to be
+    Dec 1 of the policy year (never overstates maturity). A policy with no readable valuation
+    date makes the year unknown, and unknown counts as immature. A claim-free year is measured
+    from Dec 1 (or its known start) to the latest loss-run report date.
+    """
     report_date = df["valuation_date"].max()
+
+    def months_between(start, val):
+        return (val.year - start.year) * 12 + (val.month - start.month)
+
     months_col, basis_col = [], []
     for _, r in by_year.iterrows():
         py = r["policy_year"]
-        start = starts.get(py) if pd.notna(py) else pd.NaT
-        basis = "policy_effective"
-        if pd.isna(start):
-            start = pd.Timestamp(int(py), 12, 1) if pd.notna(py) else pd.NaT
-            basis = "assumed Dec 1 start (no policy_effective)"
-        val = pd.Timestamp(r["latest_valuation"]) if pd.notna(r["latest_valuation"]) else pd.NaT
-        if pd.isna(val) and pd.notna(report_date) and r["claims"] == 0:
-            # Claim-free year: the loss runs still cover it as of the latest report date.
-            val = report_date
-            basis += "; valued at latest report date (no claims this year)"
-        months = None
-        if pd.notna(start) and pd.notna(val):
-            months = (val.year - start.year) * 12 + (val.month - start.month)
+        year_rows = df[df["policy_year"] == py] if pd.notna(py) else df.iloc[0:0]
+        if pd.isna(py):
+            months, basis = None, "unknown (no policy year)"
+        elif year_rows.empty:
+            start = pd.Timestamp(int(py), 12, 1)
+            if pd.notna(report_date):
+                months = months_between(start, report_date)
+                basis = "assumed Dec 1 start; valued at latest report date (no claims this year)"
+            else:
+                months, basis = None, "unknown (no valuation date)"
         else:
-            basis = "unknown (no valuation date)"
+            units = year_rows.groupby(["carrier", "policy_number", "policy_effective"], dropna=False)
+            results = []
+            for (_, _, eff), u in units:
+                start = eff if pd.notna(eff) else pd.Timestamp(int(py), 12, 1)
+                val = u["valuation_date"].max()
+                results.append((None if pd.isna(val) else months_between(start, val), pd.notna(eff)))
+            if any(m is None for m, _ in results):
+                months, basis = None, "unknown (a policy in this year has no valuation date)"
+            else:
+                months = min(m for m, _ in results)
+                basis = ("least mature policy in the year"
+                         + ("" if all(k for _, k in results) else "; Dec 1 start assumed where no policy_effective"))
         months_col.append(months)
         basis_col.append(basis)
     by_year["maturity_months"] = months_col
@@ -403,6 +420,13 @@ def main():
             if c not in premium.columns:
                 sys.exit(f"premium.csv is missing column: {c}")
         premium["policy_year"] = pd.to_numeric(premium["policy_year"], errors="coerce").astype("Int64")
+        bad_year = premium[premium["policy_year"].isna()]
+        if len(bad_year):
+            flags.append({"row": None, "carrier": "", "claim_number": f"({len(bad_year)} premium rows)",
+                          "flag": "premium_bad_year",
+                          "detail": "Premium rows with a blank or unreadable policy_year were left out of every "
+                                    "total and ratio. Fix the year to include them."})
+            premium = premium[premium["policy_year"].notna()].copy()
         premium["line"] = premium["line"].str.strip().str.upper()
         premium["earned_premium"] = premium["earned_premium"].map(to_number)
         bases = set(premium.get("premium_basis", pd.Series(dtype=str)).str.strip().str.lower()) - {""}

@@ -44,6 +44,10 @@ def read_csv(path):
     if len(rows) < 2 or len(rows[0]) < 2:
         sys.exit("CSV needs a header row and at least one data row with 2+ columns.")
     header, body = rows[0], rows[1:]
+    names = [h.strip() for h in header[1:]]
+    dupes = sorted({n for n in names if names.count(n) > 1})
+    if dupes:
+        sys.exit(f"Duplicate column name(s): {', '.join(dupes)}. Rename them so no series is dropped.")
     cats = [r[0] for r in body]
     series = {}
     for j, name in enumerate(header[1:], start=1):
@@ -99,19 +103,26 @@ def main():
         if blanks:
             print(f"Note: {blanks} blank cell(s) drawn as zero in the stack. Say so on the slide.", file=sys.stderr)
             series = {k: [0.0 if math.isnan(v) else v for v in vals] for k, vals in series.items()}
-        bottom = [0.0] * len(cats)
-        tallest = max(sum(series[nm][k] for nm in names) for k in range(len(cats))) or 1
+        # Positive values stack up from zero, negative values stack down from zero.
+        pos_base, neg_base = [0.0] * len(cats), [0.0] * len(cats)
+        tallest = max(max(sum(max(series[nm][k], 0) for nm in names),
+                          -sum(min(series[nm][k], 0) for nm in names)) for k in range(len(cats))) or 1
         for i, name in enumerate(names):
-            bars = ax.bar(x, series[name], 0.6, bottom=bottom, color=PALETTE[i % len(PALETTE)], label=name)
+            vals = series[name]
+            bottoms = [pb if v >= 0 else nb for v, pb, nb in zip(vals, pos_base, neg_base)]
+            bars = ax.bar(x, vals, 0.6, bottom=bottoms, color=PALETTE[i % len(PALETTE)], label=name)
             if a.labels:
-                for b, v, btm in zip(bars, series[name], bottom):
-                    if v and v >= 0.08 * tallest:
+                for b, v, btm in zip(bars, vals, bottoms):
+                    if v and abs(v) >= 0.08 * tallest:
                         ax.text(b.get_x() + b.get_width() / 2, btm + v / 2, fmt_value(v, a.format),
                                 ha="center", va="center", fontsize=9, color="white")
-            bottom = [b + v for b, v in zip(bottom, series[name])]
+            pos_base = [pb + max(v, 0) for pb, v in zip(pos_base, vals)]
+            neg_base = [nb + min(v, 0) for nb, v in zip(neg_base, vals)]
         if a.labels:
-            for xi, tot in zip(x, bottom):
-                ax.text(xi, tot, fmt_value(tot, a.format), ha="center", va="bottom", fontsize=10)
+            for xi, top, low in zip(x, pos_base, neg_base):
+                net = top + low
+                ax.text(xi, top if top > 0 else low, fmt_value(net, a.format), ha="center",
+                        va="bottom" if top > 0 else "top", fontsize=10)
     else:
         width = 0.7 / n
         for i, name in enumerate(names):

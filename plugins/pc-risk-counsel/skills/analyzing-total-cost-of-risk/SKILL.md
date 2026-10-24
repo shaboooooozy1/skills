@@ -58,7 +58,7 @@ Add `--years 2021-2025` with the years the loss runs cover. Years with no claims
 python scripts/tcor.py inputs.json --out tcor_summary
 ```
 
-Writes `tcor_summary.xlsx` (TCOR and Detail sheets) and `tcor_summary.json`.
+Writes `tcor_summary.xlsx` (TCOR and Detail sheets) and `tcor_summary.json`. A period without premiums stops the run. Any other component left out or blank is counted as 0 and listed in that period's `open_items`; carry those into the findings' open items.
 
 ## Where numbers come from
 

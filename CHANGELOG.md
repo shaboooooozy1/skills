@@ -7,7 +7,10 @@
 - Retention replay: same blank-claim and partial-split rules as the loss-run script.
 - Loss runs: year and all-years loss ratios only use years whose premium covers every line with claims; ALL premium is defined as lines not listed separately; written premium is labeled as written; duplicate rows with no readable valuation date no longer crash the script.
 - Retention replay: policy years with no claims in the selected lines count as zero retained (new `--years` flag); an undated row never wins over a dated valuation.
-- Charts: negative values are no longer clipped at zero; blank cells show as gaps, not zeros.
+- Charts: negative values are no longer clipped at zero; blank cells show as gaps, not zeros; stacked charts put negative parts below zero; duplicate column names are rejected.
+- Loss runs: year maturity uses the least mature policy in the year; reserve flags check any known reserve; zero-premium years are not counted as rated; premium rows with an unreadable year are flagged and excluded from totals.
+- Retention replay: options with the same retention but different aggregates stay separate; claims with no known amount and undated duplicates are named in the notes.
+- TCOR: missing premiums stop the run; any other component left out or blank is listed in `open_items`.
 - `m365-email-command-center` description narrowed to inbox-level work.
 - Security: workbook writers in all three risk scripts force any text starting with `=` to a plain string, so carrier-supplied text can never open as a live Excel formula. The text itself is kept exactly as printed.
 - Security: the `skill-zips` install artifact is uploaded only from pushes to `main`, never from pull request runs.

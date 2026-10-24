@@ -206,6 +206,52 @@ with tempfile.TemporaryDirectory() as tmp:
     check(cf["by_year"][0]["loss_ratio"] is None and cf["totals"]["loss_ratio_years"] == [],
           f"unknown premium on a claim-free line must leave the year unrated: {cf['by_year'][0]}")
 
+    # Codex round on 9f9b6b1: retention options, unknown amounts, undated dups, reserve flags,
+    # least-mature policy, zero premium, bad premium years, TCOR open items, chart stacking.
+    (tp / "cx.csv").write_text(
+        "carrier,policy_number,policy_year,policy_effective,line,claim_number,loss_date,status,paid_loss,"
+        "outstanding_loss,carrier_incurred,valuation_date\n"
+        "T,P1,2023,2023-01-01,GL,G1,2023-03-01,closed,,500,4000,2026-09-30\n"
+        "U,P2,2023,2023-12-01,GL,G2,2024-01-15,open,100,0,,2024-12-31\n"
+        "T,P1,2023,2023-01-01,GL,G3,2023-04-01,closed,,,,2026-09-30\n"
+        "V,P3,2024,,AL,A1,2024-06-01,closed,1000,0,,\n"
+        "V,P3,2024,,AL,A1,2024-06-01,closed,9000,0,,\n")
+    (tp / "cx_prem.csv").write_text("policy_year,line,earned_premium\n2023,GL,0\n2024,GL,10000\n,GL,999\n")
+    run([LR, "cx.csv", "--premium", "cx_prem.csv", "--as-of", "2026-10-24", "--out", "cx"], tmp)
+    cx = json.loads((tp / "cx.json").read_text())
+    fc = cx["flag_counts"]
+    check(fc.get("closed_with_reserve") == 1, f"reserve on carrier-total claim not flagged: {fc}")
+    check(fc.get("open_zero_reserve") == 1 and fc.get("premium_bad_year") == 1, f"flags {fc}")
+    y23 = [y for y in cx["by_year"] if y["policy_year"] == 2023][0]
+    check(y23["maturity_months"] == 12 and y23["immature"] is True,
+          f"maturity must use the least mature policy: {y23}")
+    gl = [r for r in cx["by_line"] if r["line"] == "GL"][0]
+    check(gl["loss_ratio"] is None or gl["rated_years"] != "2023",
+          f"zero-premium year counted as rated: {gl}")
+    check(round(cx["totals"]["earned_premium"]) == 10000, f"bad-year premium kept in total: {cx['totals']}")
+
+    run([RET, "cx.csv", "--retentions", "5000,5000", "--aggregate", "10000,20000", "--out", "cx_ret"], tmp)
+    cxr = json.loads((tp / "cx_ret.json").read_text())
+    check(len(cxr["summary"]) == 2 and all(s["years"] == 2 for s in cxr["summary"]),
+          f"retention options merged: {cxr['summary']}")
+    notes = " ".join(cxr["notes"])
+    check("no known amount" in notes and "no readable valuation date" in notes, f"notes {cxr['notes']}")
+
+    (tp / "tc_open_in.json").write_text(json.dumps({"periods": [{"label": "x", "premiums": {"WC": 100, "GL": ""}}]}))
+    run([TCOR, "tc_open_in.json", "--out", "tc_open"], tmp)
+    oi = json.loads((tp / "tc_open.json").read_text())["periods"][0]["open_items"]
+    check("GL blank" in oi and "Retained losses not supplied" in oi, f"TCOR open items missing: {oi!r}")
+    (tp / "tc_none.json").write_text(json.dumps({"periods": [{"label": "y"}]}))
+    r = subprocess.run([sys.executable, "-I", str(TCOR), "tc_none.json"], cwd=tmp, capture_output=True, text=True)
+    check(r.returncode != 0 and "premiums are missing" in r.stderr, "missing premiums not rejected")
+
+    (tp / "dup.csv").write_text("Year,Premium,Premium\n2024,1,2\n")
+    r = subprocess.run([sys.executable, "-I", str(CHART), "dup.csv", "--title", "x", "--out", "dup"],
+                       cwd=tmp, capture_output=True, text=True)
+    check(r.returncode != 0 and "Duplicate column" in r.stderr, "duplicate chart headers not rejected")
+    (tp / "stk.csv").write_text("Year,Premium,Credit\n2024,100,-40\n")
+    run([CHART, "stk.csv", "--type", "stacked", "--title", "x", "--labels", "--out", "stk"], tmp)
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"

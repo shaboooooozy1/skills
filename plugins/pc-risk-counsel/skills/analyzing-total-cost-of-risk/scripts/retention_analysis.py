@@ -61,7 +61,16 @@ def load(path, basis, notes):
     # latest valuation per claim; rows missing carrier or claim number are never merged together
     df = df.sort_values("valuation_date", na_position="first")  # undated rows never win over dated ones
     no_id = df["claim_number"].str.strip().eq("") | df["carrier"].str.strip().eq("")
-    df = pd.concat([df[no_id], df[~no_id].drop_duplicates(subset=["carrier", "claim_number"], keep="last")])
+    keyed = df[~no_id]
+    undated_dups = keyed[keyed["valuation_date"].isna()
+                         & keyed.duplicated(subset=["carrier", "claim_number"], keep=False)]
+    ambiguous = (undated_dups.groupby(["carrier", "claim_number"]).size().index
+                 .difference(keyed[keyed["valuation_date"].notna()].set_index(["carrier", "claim_number"]).index))
+    if len(ambiguous):
+        notes.append(f"{len(ambiguous)} claim(s) appear more than once with no readable valuation date "
+                     f"({', '.join(c for _, c in ambiguous)}). Kept one row each without knowing which is "
+                     "current. Confirm against the carrier reports.")
+    df = pd.concat([df[no_id], keyed.drop_duplicates(subset=["carrier", "claim_number"], keep="last")])
     if no_id.any():
         notes.append(f"{int(no_id.sum())} row(s) lack a carrier or claim number and were kept as separate claims.")
     # Same rule as summarize_loss_runs.py: the split is complete when paid_loss and outstanding_loss
@@ -78,10 +87,15 @@ def load(path, basis, notes):
         amt = df["paid_loss"].fillna(0) + df["outstanding_loss"].fillna(0) - rec
     else:
         amt = df[SPLIT].fillna(0).sum(axis=1) - rec
-    n_fallback = int((~has_split).sum())
+    n_fallback = int((~has_split & df["carrier_incurred"].notna()).sum())
     if n_fallback:
         notes.append(f"{n_fallback} claim(s) had only a carrier incurred total. Used it as the claim amount"
                      + (" (includes expense, overstates loss-only basis)." if basis == "loss_only" else "."))
+    no_amount = ~has_split & df["carrier_incurred"].isna()
+    if no_amount.any():
+        notes.append(f"{int(no_amount.sum())} claim(s) have no known amount at all "
+                     f"({', '.join(df.loc[no_amount, 'claim_number'].replace('', '(blank)'))}). Counted as 0, "
+                     "so every scenario's retained losses are understated until they are filled in.")
     df["amount"] = amt.where(has_split, df["carrier_incurred"]).fillna(0).clip(lower=0)
     return df
 
@@ -117,6 +131,9 @@ def main():
         sys.exit("--aggregate needs one value, or one per retention option.")
     if len(aggs) == 1:
         aggs = aggs * len(rets)
+    pairs = list(zip(rets, aggs or [None] * len(rets)))
+    if len(set(pairs)) != len(pairs):
+        sys.exit("The same retention and aggregate pair is listed twice. List each option once.")
     immature = {int(y) for y in a.immature_years.split(",")} if a.immature_years else set()
 
     df = load(a.claims, a.basis, notes)
@@ -148,6 +165,7 @@ def main():
     rows, piercing = [], []
     for i, ret in enumerate(rets):
         agg = aggs[i] if aggs else None
+        option = f"${ret:,.0f}" + (f" / ${agg:,.0f} agg" if agg is not None else "")
         for y in years:
             g = df[df["policy_year"] == y]
             per_claim = g["amount"].clip(upper=ret)
@@ -158,7 +176,7 @@ def main():
             total = float(g["amount"].sum())
             over = g[g["amount"] > ret]
             rows.append({
-                "retention": ret, "aggregate": agg, "policy_year": y,
+                "option": option, "retention": ret, "aggregate": agg, "policy_year": y,
                 "immature": y in immature, "claims": int(len(g)), "total_losses": total,
                 "retained": retained, "ceded": total - retained,
                 "retained_pct": retained / total if total else None,
@@ -171,10 +189,10 @@ def main():
     detail = pd.DataFrame(rows)
 
     summ = []
-    for ret, g in detail.groupby("retention", sort=False):
+    for option, g in detail.groupby("option", sort=False):  # one row per retention+aggregate option
         mature = g[~g["immature"]]
         summ.append({
-            "retention": ret, "aggregate": g["aggregate"].iloc[0],
+            "option": option, "retention": g["retention"].iloc[0], "aggregate": g["aggregate"].iloc[0],
             "years": len(g), "avg_annual_retained_all_years": g["retained"].mean(),
             "avg_annual_retained_mature_years": mature["retained"].mean() if len(mature) else None,
             "worst_year_retained": g["retained"].max(),
