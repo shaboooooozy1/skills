@@ -46,6 +46,15 @@ def parse_money(s):
     return -n if neg else n
 
 
+def guard_outputs(inputs, out):
+    """Stop before writing if --out would overwrite an input file (e.g. inputs.json with --out inputs)."""
+    from pathlib import Path
+    ins = {Path(p).resolve() for p in inputs if p}
+    hit = [str(o) for o in (Path(f"{out}.xlsx").resolve(), Path(f"{out}.json").resolve()) if o in ins]
+    if hit:
+        sys.exit(f"--out {out} would overwrite the input {hit[0]}. Choose a different --out name.")
+
+
 def num(v, where):
     if v is None or v == "":
         return 0.0
@@ -138,6 +147,7 @@ def main():
     ap.add_argument("inputs")
     ap.add_argument("--out", default="tcor_summary")
     a = ap.parse_args()
+    guard_outputs([a.inputs], a.out)
 
     with open(a.inputs) as f:
         cfg = json.load(f)

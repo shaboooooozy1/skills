@@ -45,6 +45,15 @@ def read_table(path):
     return pd.read_csv(path, dtype=str, keep_default_na=False, encoding="utf-8-sig")
 
 
+def guard_outputs(inputs, out):
+    """Stop before writing if --out would overwrite an input file (e.g. inputs.json with --out inputs)."""
+    from pathlib import Path
+    ins = {Path(p).resolve() for p in inputs if p}
+    hit = [str(o) for o in (Path(f"{out}.xlsx").resolve(), Path(f"{out}.json").resolve()) if o in ins]
+    if hit:
+        sys.exit(f"--out {out} would overwrite the input {hit[0]}. Choose a different --out name.")
+
+
 def to_number(v):
     """'$1,250' -> 1250.0, '(1,250)' -> -1250.0, '' -> NaN."""
     if pd.isna(v):
@@ -487,6 +496,11 @@ def main():
     p.add_argument("--stale-days", type=int, default=90)
     p.add_argument("--out", default="loss_summary")
     a = p.parse_args()
+    guard_outputs([a.claims, a.premium], a.out)
+    try:
+        a.as_of = date.fromisoformat(a.as_of).isoformat()
+    except ValueError:
+        sys.exit(f"--as-of must be a date like 2026-10-24, not {a.as_of!r}.")
     if a.stale_days < 0:
         sys.exit("--stale-days must be 0 or more.")
     if not math.isfinite(a.large_loss) or a.large_loss < 0:

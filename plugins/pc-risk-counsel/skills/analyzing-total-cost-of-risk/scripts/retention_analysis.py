@@ -40,6 +40,15 @@ def read_table(path):
     return pd.read_csv(path, dtype=str, keep_default_na=False, encoding="utf-8-sig")
 
 
+def guard_outputs(inputs, out):
+    """Stop before writing if --out would overwrite an input file (e.g. inputs.json with --out inputs)."""
+    from pathlib import Path
+    ins = {Path(p).resolve() for p in inputs if p}
+    hit = [str(o) for o in (Path(f"{out}.xlsx").resolve(), Path(f"{out}.json").resolve()) if o in ins]
+    if hit:
+        sys.exit(f"--out {out} would overwrite the input {hit[0]}. Choose a different --out name.")
+
+
 def to_number(v):
     if pd.isna(v):
         return float("nan")
@@ -232,6 +241,7 @@ def main():
                     "or 'none'. Without it the mature-years average is withheld.")
     ap.add_argument("--out", default="retention")
     a = ap.parse_args()
+    guard_outputs([a.claims], a.out)
 
     notes = []
     rets = money_list(a.retentions, "retentions")

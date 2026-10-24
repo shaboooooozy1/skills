@@ -451,8 +451,8 @@ with tempfile.TemporaryDirectory() as tmp:
         (tp / "tc_sep.json").write_text(json.dumps({"periods": [{"label": "P", "premiums": bad}]}))
         check(fails([TCOR, "tc_sep.json"], "Not a number"), f"TCOR accepted malformed premium {bad}")
     (tp / "tc_scalar.json").write_text(json.dumps({"periods": [{"label": "P", "premiums": "$1,250", "admin": 300}]}))
-    run([TCOR, "tc_scalar.json", "--out", "tc_scalar"], tmp)
-    det = [c.value for row in openpyxl.load_workbook(tp / "tc_scalar.xlsx")["Detail"].iter_rows() for c in row]
+    run([TCOR, "tc_scalar.json", "--out", "tc_scalar_out"], tmp)
+    det = [c.value for row in openpyxl.load_workbook(tp / "tc_scalar_out.xlsx")["Detail"].iter_rows() for c in row]
     check(1250 in det and 300 in det, f"scalar components missing from Detail sheet: {det}")
     (tp / "wide.csv").write_text("Year,Revenue\n2024,1,000\n")
     check(fails([CHART, "wide.csv", "--title", "x"], "more fields than the header"), "unquoted 1,000 charted as 1")
@@ -492,8 +492,8 @@ with tempfile.TemporaryDirectory() as tmp:
     (tp / "tc_bool.json").write_text(json.dumps({"periods": [{"label": "P", "premiums": True}]}))
     check(fails([TCOR, "tc_bool.json"], "Not a number"), "JSON true accepted as a premium")
     (tp / "tc_lbl.json").write_text(json.dumps({"periods": [{"label": 2025, "premiums": 1000}]}))
-    run([TCOR, "tc_lbl.json", "--out", "tc_lbl"], tmp)
-    check((tp / "tc_lbl.json").exists() and (tp / "tc_lbl.xlsx").exists(), "numeric period label crashed TCOR")
+    run([TCOR, "tc_lbl.json", "--out", "tc_lbl_out"], tmp)
+    check((tp / "tc_lbl_out.xlsx").exists(), "numeric period label crashed TCOR")
     pz = tp / "pz"
     (pz / "scripts").mkdir(parents=True)
     (pz / "plugins/p/skills/s").mkdir(parents=True)
@@ -506,8 +506,8 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # Codex round on 351f0af.
     (tp / "tc_null.json").write_text(json.dumps({"periods": [{"label": "P", "premiums": 1000, "source": None}]}))
-    run([TCOR, "tc_null.json", "--out", "tc_null"], tmp)
-    tn = json.loads((tp / "tc_null.json").read_text())["periods"][0]
+    run([TCOR, "tc_null.json", "--out", "tc_null_out"], tmp)
+    tn = json.loads((tp / "tc_null_out.json").read_text())["periods"][0]
     check("No source" in str(tn.get("open_items")), f"null source treated as sourced: {tn}")
     (tp / "nomt.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,"
         "carrier_incurred,valuation_date\nT,2024,GL,N1,2024-03-01,open,,,,2026-09-30\n"
@@ -536,6 +536,14 @@ with tempfile.TemporaryDirectory() as tmp:
     run([RET, "scn.csv", "--retentions", "1000", "--lines", "AL", "--immature-years", "none", "--out", "scn"], tmp)
     sn = " ".join(json.loads((tp / "scn.json").read_text())["notes"])
     check("W9" not in sn, f"AL-only replay carries notes about an excluded WC claim: {sn}")
+
+    # Codex round on 004928f.
+    (tp / "keep.json").write_text(json.dumps({"periods": [{"label": "P", "premiums": 1000, "source": "s"}]}))
+    before = (tp / "keep.json").read_text()
+    check(fails([TCOR, "keep.json", "--out", "keep"], "would overwrite") and (tp / "keep.json").read_text() == before,
+          "TCOR overwrote its own input JSON")
+    check(fails([LR, "mm.csv", "--as-of", "2026-13-45"], "--as-of"), "malformed --as-of accepted")
+    check(fails([LR, "noyr.csv", "--as-of", "yesterday"], "--as-of"), "malformed --as-of accepted on undated file")
 
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
