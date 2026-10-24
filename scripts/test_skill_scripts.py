@@ -854,6 +854,16 @@ with tempfile.TemporaryDirectory() as tmp:
         check("Traceback" not in r.stderr and "FAIL marketplace.json" in r.stdout,
               f"malformed marketplace.json {bad} crashed the validator: {r.stderr[-150:]}")
 
+    # Codex round on edb15c6.
+    for bad in ('{"plugins": [{"name": "p", "source": "plugins", "skills": 5}]}',
+                '{"plugins": [{"name": "p", "source": "plugins", "skills": [1]}]}'):
+        (mk / ".claude-plugin/marketplace.json").write_text(bad)
+        r = subprocess.run([sys.executable, "-I", str(mk / "scripts/validate_skills.py")], capture_output=True, text=True)
+        check("Traceback" not in r.stderr and "skills must be a list" in r.stdout,
+              f"malformed skills list crashed the validator: {r.stderr[-150:]}")
+    skill_text = (ROOT / "plugins/pc-risk-counsel/skills/analyzing-loss-runs/SKILL.md").read_text()
+    check("--as-of 20" not in skill_text, "SKILL.md example hard-codes an --as-of date")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"

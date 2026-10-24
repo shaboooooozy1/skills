@@ -9,6 +9,7 @@ description: >-
   Output feeds TCOR, retention, renewal, and submission work. Not for benefits claims experience.
 license: MIT
 metadata:
+  requires: Python 3.10+ with pandas and openpyxl (pip install pandas openpyxl)
   version: 1.0.0
   author: Will Bloomstine
 ---
@@ -44,12 +45,11 @@ Record "no losses" years explicitly. A policy year with zero claims is evidence,
 python scripts/summarize_loss_runs.py claims.csv \
   --premium premium.csv \
   --large-loss 100000 \
-  --as-of 2026-10-24 \
   --out loss_summary
 ```
 
 - `--large-loss`: individual claim threshold for the large-loss list. Default 50,000. Use the user's number if given.
-- `--as-of`: the date used to judge stale valuations. Default today.
+- `--as-of`: the date used to judge stale valuations, as YYYY-MM-DD. Leave it out to use today. Set it only to reproduce an earlier review.
 - Writes `loss_summary.xlsx` (sheets: Summary_by_Year, Summary_by_Year_Line, Summary_by_Line, Large_Losses, Open_Claims, Top_Causes, Data_Flags, Claims) and `loss_summary.json` with the same tables. Loss ratios appear wherever premium was supplied, and a premium-only year or line shows with zero losses.
 - The Claims sheet carries schema columns only. Any extra columns in claims.csv (claimant names, notes) are dropped from every output.
 

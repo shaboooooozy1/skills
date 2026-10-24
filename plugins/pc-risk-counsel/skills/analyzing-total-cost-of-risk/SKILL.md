@@ -10,6 +10,7 @@ description: >-
   benefits funding or stop-loss.
 license: MIT
 metadata:
+  requires: Python 3.10+ with pandas and openpyxl (pip install pandas openpyxl)
   version: 1.0.0
   author: Will Bloomstine
 ---

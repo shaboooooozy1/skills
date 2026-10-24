@@ -8,6 +8,7 @@ description: >-
   bar chart." Do NOT use for interactive dashboards or full slide decks.
 license: MIT
 metadata:
+  requires: Python 3.10+ with matplotlib (pip install matplotlib)
   version: 1.1.0
   author: Will Bloomstine
 ---

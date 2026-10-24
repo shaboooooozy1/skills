@@ -20,6 +20,12 @@ Skills for a commercial P&C and employee benefits client executive. Each one tur
 /plugin install personal-productivity@bloomstine-skills
 ```
 
+The scripts in these plugins need Python 3.10+ and three packages. Install them once in the Python that Claude Code uses:
+```
+pip install -r requirements.txt   # or: pip install pandas openpyxl matplotlib
+```
+Claude.ai already has these packages.
+
 **Claude.ai** — download a skill ZIP from the latest **main-branch** run of the Validate skills workflow (artifact `skill-zips`; pull request runs do not publish it), or build them yourself from a checkout of `main` with `python scripts/package_zips.py`. Upload in Customize > Skills.
 
 **API** — upload the skill folder through the Skills API. Scripts need `pandas`, `openpyxl`, and `matplotlib`.

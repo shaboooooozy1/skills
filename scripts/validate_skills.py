@@ -140,7 +140,12 @@ def main():
         if not src.exists():
             print(f"FAIL marketplace plugin '{plug['name']}': source {plug['source']} missing")
             failed += 1
-        for s in plug.get("skills", []):
+        skills = plug.get("skills") or []
+        if not isinstance(skills, list) or not all(isinstance(s, str) for s in skills):
+            print(f"FAIL marketplace plugin '{plug['name']}': skills must be a list of paths")
+            failed += 1
+            continue
+        for s in skills:
             if not (ROOT / s / "SKILL.md").exists():
                 print(f"FAIL marketplace plugin '{plug['name']}': skill {s} missing")
                 failed += 1
