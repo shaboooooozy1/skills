@@ -15,6 +15,17 @@ SKIP_PARTS = {"__pycache__", ".DS_Store", "node_modules", ".pytest_cache"}
 MAX_BYTES = 30 * 1024 * 1024  # API upload limit (uncompressed)
 
 
+def linked_path(d):
+    """First symlink among d and its parents up to (not including) the repo root, else None.
+    A link anywhere on that path, e.g. plugins/p -> ../outside, would pull outside files in."""
+    for p in [d, *d.parents]:
+        if p == ROOT:
+            return None
+        if p.is_symlink():
+            return p
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="dist")
@@ -23,9 +34,10 @@ def main():
     out.mkdir(exist_ok=True)
     for skill_md in sorted((ROOT / "plugins").glob("*/skills/*/SKILL.md")):
         d = skill_md.parent
-        if d.is_symlink() or skill_md.is_symlink():
-            # a symlinked skill folder would package files from outside the plugin
-            raise SystemExit(f"{d}: the skill folder or its SKILL.md is a symlink. Skills must be real folders.")
+        link = linked_path(skill_md)
+        if link:
+            # a symlinked skill folder, plugin folder or SKILL.md would package files from outside the plugin
+            raise SystemExit(f"{link} is a symlink. Plugin and skill folders must be real folders.")
         root = d.resolve()
         links = [f for f in d.rglob("*") if f.is_symlink()]
         if links:

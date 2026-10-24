@@ -63,6 +63,17 @@ def house_rules(skill_dir):
     return errs, warns
 
 
+def linked_path(d):
+    """First symlink among d and its parents up to (not including) the repo root, else None.
+    A link anywhere on that path, e.g. plugins/p -> ../outside, would pull outside files in."""
+    for p in [d, *d.parents]:
+        if p == ROOT:
+            return None
+        if p.is_symlink():
+            return p
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", choices=["plugins", "skills"], help="Limit to one tree")
@@ -83,8 +94,9 @@ def main():
             errs, warns = ([f"symlinks are not allowed in a skill: {', '.join(links)}"] if links else []), []
         else:
             errs, warns = house_rules(d)
-        if d.is_symlink() or (d / "SKILL.md").is_symlink():
-            errs.insert(0, "the skill folder or its SKILL.md is a symlink; skills must be real folders")
+        link = linked_path(d / "SKILL.md")
+        if link:
+            errs.insert(0, f"{link.relative_to(ROOT)} is a symlink; plugin and skill folders must be real folders")
         if not ok:
             errs.insert(0, msg)
         rel = d.relative_to(ROOT)

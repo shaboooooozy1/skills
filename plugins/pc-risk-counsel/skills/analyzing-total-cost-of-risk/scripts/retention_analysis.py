@@ -228,7 +228,11 @@ def amounts(df, basis, notes):
         notes.append(f"{int(mismatch.sum())} claim(s) have a paid/outstanding split that disagrees with the "
                      f"carrier incurred total ({', '.join(df.loc[mismatch, 'claim_number'])}). The split was "
                      "used. Resolve with the carrier before relying on these scenarios.")
-    df["amount"] = amt.where(has_split, df["carrier_incurred"]).fillna(0).clip(lower=0)
+    net = amt.where(has_split, df["carrier_incurred"])
+    if (net < 0).any():
+        notes.append(f"{int((net < 0).sum())} claim(s) have recoveries larger than paid + outstanding "
+                     f"({', '.join(df.loc[net < 0, 'claim_number'])}). Counted as 0, same as the loss summary.")
+    df["amount"] = net.fillna(0).clip(lower=0)
     return df
 
 
@@ -287,6 +291,11 @@ def main():
                      "still developing. Rerun with --immature-years (or 'none' if every year is mature).")
 
     df = load(a.claims)
+    odd = df[~df["line"].isin(LINE_CODES)]
+    if len(odd):
+        # checked before any --lines filter, so a typo like WCC can never vanish from a WC replay
+        sys.exit(f"Line code(s) {', '.join(sorted(set(odd['line']) - {''}) or ['(blank)'])} are not schema codes "
+                 f"(claims {', '.join(odd['claim_number'].replace('', '(blank)'))}). Fix them or use OTHER.")
     # Year range comes from the whole file (or --years), before the line filter, so a year
     # with no claims in the selected lines still counts as a zero-retained year.
     if a.years:

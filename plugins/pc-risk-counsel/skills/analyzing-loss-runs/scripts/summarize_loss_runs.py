@@ -223,6 +223,11 @@ def compute_amounts(df, flags):
                 flag(flags, r, "incurred_mismatch",
                      f"paid + outstanding - recoveries = {computed[i]:,.0f} but carrier incurred = "
                      f"{r['carrier_incurred']:,.0f}. Computed value used.")
+        if pd.notna(df.at[i, "incurred"]) and df.at[i, "incurred"] < 0:
+            flag(flags, r, "net_negative_incurred",
+                 f"Recoveries exceed paid + outstanding (net {df.at[i, 'incurred']:,.0f}). Counted as 0 here and in "
+                 "the retention replay. Confirm the recovery with the carrier.")
+            df.at[i, "incurred"] = 0.0
         if pd.isna(df.at[i, "incurred"]):
             flag(flags, r, "missing_amounts", "No paid/outstanding split and no carrier incurred. Counted as 0.")
             df.at[i, "incurred"] = 0.0

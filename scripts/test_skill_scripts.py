@@ -606,6 +606,33 @@ with tempfile.TemporaryDirectory() as tmp:
     check(r.returncode != 0 and "symlink" in r.stderr and not (sl / "dist/s.zip").exists(),
           f"symlinked skill folder packaged: {r.stderr[-200:]}")
 
+    # Codex round on f8994dc.
+    al = tp / "al"
+    (al / "scripts").mkdir(parents=True)
+    (al / "outside/skills/leak").mkdir(parents=True)
+    (al / "plugins").mkdir(parents=True)
+    (al / "scripts/package_zips.py").write_text((ROOT / "scripts/package_zips.py").read_text())
+    (al / "outside/skills/leak/SKILL.md").write_text("---\nname: leak\ndescription: x\n---\n")
+    (al / "outside/skills/leak/secret.txt").write_text("not for packaging")
+    (al / "plugins/p").symlink_to(al / "outside", target_is_directory=True)
+    r = subprocess.run([sys.executable, "-I", str(al / "scripts/package_zips.py")], capture_output=True, text=True)
+    check(r.returncode != 0 and "symlink" in r.stderr and not (al / "dist/leak.zip").exists(),
+          f"symlinked plugin folder packaged: {r.stderr[-200:]}")
+    (tp / "wcc.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
+        "T,2024,WCC,C1,2024-03-01,closed,5000,0,2026-09-30\nT,2024,WC,C2,2024-03-01,closed,100,0,2026-09-30\n")
+    check(fails([RET, "wcc.csv", "--retentions", "1000", "--lines", "WC"], "not schema codes"),
+          "claim line typo vanished from a WC replay")
+    (tp / "rec.csv").write_text("carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,"
+        "recoveries,valuation_date\nT,2024,GL,R1,2024-03-01,closed,100,0,500,2026-09-30\n"
+        "T,2024,GL,R2,2024-03-01,closed,300,0,0,2026-09-30\n")
+    run([LR, "rec.csv", "--as-of", "2026-10-24", "--out", "rec"], tmp)
+    run([RET, "rec.csv", "--retentions", "100000", "--immature-years", "none", "--out", "rec_ret"], tmp)
+    rc = json.loads((tp / "rec.json").read_text())
+    rr = json.loads((tp / "rec_ret.json").read_text())
+    check(rc["flag_counts"].get("net_negative_incurred") == 1 and rc["totals"]["incurred"] == 300
+          == rr["summary"][0]["total_retained"],
+          f"net-negative claim: summary {rc['totals']['incurred']} vs replay {rr['summary'][0]['total_retained']}")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"
