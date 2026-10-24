@@ -193,7 +193,12 @@ def check_valuations(df, flags, as_of, stale_days):
     """One flag per carrier report (carrier + valuation date), not per claim."""
     for (carrier, vdate), g in df.dropna(subset=["valuation_date"]).groupby(["carrier", "valuation_date"]):
         age = (pd.Timestamp(as_of) - vdate).days
-        if age > stale_days:
+        if age < 0:
+            flags.append({"row": None, "carrier": carrier, "claim_number": f"({len(g)} claims)",
+                          "flag": "future_valuation",
+                          "detail": f"Report valued {vdate.date()}, after --as-of {as_of}. Check the date or the "
+                                    "--as-of value; maturity uses this date as given."})
+        elif age > stale_days:
             flags.append({"row": None, "carrier": carrier, "claim_number": f"({len(g)} claims)",
                           "flag": "stale_valuation",
                           "detail": f"Report valued {vdate.date()}, {age} days before {as_of}. Request current loss runs."})

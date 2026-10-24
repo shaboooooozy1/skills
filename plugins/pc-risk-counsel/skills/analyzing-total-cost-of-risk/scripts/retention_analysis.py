@@ -70,6 +70,13 @@ def load(path, basis, notes):
         notes.append(f"{len(ambiguous)} claim(s) appear more than once with no readable valuation date "
                      f"({', '.join(c for _, c in ambiguous)}). Kept one row each without knowing which is "
                      "current. Confirm against the carrier reports.")
+    dated = keyed[keyed["valuation_date"].notna()]
+    latest = dated[dated["valuation_date"] == dated.groupby(["carrier", "claim_number"])["valuation_date"].transform("max")]
+    tied = latest[latest.duplicated(subset=["carrier", "claim_number"], keep=False)]
+    if len(tied):
+        names = sorted(set(tied["claim_number"]))
+        notes.append(f"{len(names)} claim(s) have two rows with the same latest valuation date "
+                     f"({', '.join(names)}). Kept one without knowing which is right. Confirm with the carrier.")
     df = pd.concat([df[no_id], keyed.drop_duplicates(subset=["carrier", "claim_number"], keep="last")])
     if no_id.any():
         notes.append(f"{int(no_id.sum())} row(s) lack a carrier or claim number and were kept as separate claims.")
@@ -131,6 +138,8 @@ def main():
         sys.exit("--aggregate needs one value, or one per retention option.")
     if len(aggs) == 1:
         aggs = aggs * len(rets)
+    if any(v < 0 for v in rets + aggs):
+        sys.exit("Retentions and aggregates must be zero or positive.")
     pairs = list(zip(rets, aggs or [None] * len(rets)))
     if len(set(pairs)) != len(pairs):
         sys.exit("The same retention and aggregate pair is listed twice. List each option once.")
@@ -189,10 +198,11 @@ def main():
     detail = pd.DataFrame(rows)
 
     summ = []
-    for option, g in detail.groupby("option", sort=False):  # one row per retention+aggregate option
+    # One row per retention+aggregate option, grouped on the raw numbers (labels are rounded).
+    for _, g in detail.groupby(["retention", "aggregate"], dropna=False, sort=False):
         mature = g[~g["immature"]]
         summ.append({
-            "option": option, "retention": g["retention"].iloc[0], "aggregate": g["aggregate"].iloc[0],
+            "option": g["option"].iloc[0], "retention": g["retention"].iloc[0], "aggregate": g["aggregate"].iloc[0],
             "years": len(g), "avg_annual_retained_all_years": g["retained"].mean(),
             "avg_annual_retained_mature_years": mature["retained"].mean() if len(mature) else None,
             "worst_year_retained": g["retained"].max(),

@@ -82,6 +82,8 @@ def compute_period(p, i):
     row["open_items"] = "; ".join(open_items)
     exp = p.get("exposure")
     row["exposure"] = num(exp, f"{label}.exposure") if exp not in (None, "") else None
+    if row["exposure"] is not None and row["exposure"] <= 0:
+        sys.exit(f"{label}.exposure must be positive. Leave it out if it is unknown.")
     row["notes"] = p.get("notes", "")
     row["source"] = p.get("source", "")
     return row, detail

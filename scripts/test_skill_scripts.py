@@ -275,6 +275,26 @@ with tempfile.TemporaryDirectory() as tmp:
     check(not tws.cell(row=2, column=th["exposure"]).number_format.startswith("$"),
           "vehicle count formatted as currency")
 
+    # Codex round on 43abac2: input validation.
+    def fails(args, needle):
+        r = subprocess.run([sys.executable, "-I", *map(str, args)], cwd=tmp, capture_output=True, text=True)
+        return r.returncode != 0 and needle in r.stderr
+    check(fails([RET, EV / "analyzing-loss-runs/claims.csv", "--retentions", "-5000"], "zero or positive"),
+          "negative retention not rejected")
+    (tp / "tc_neg.json").write_text(json.dumps({"periods": [{"label": "n", "premiums": 1, "exposure": -5}]}))
+    check(fails([TCOR, "tc_neg.json"], "must be positive"), "negative exposure not rejected")
+    (tp / "tie.csv").write_text(
+        "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
+        "T,2024,GL,G1,2024-03-01,closed,100,0,2026-09-30\nT,2024,GL,G1,2024-03-01,closed,900,0,2026-09-30\n")
+    run([RET, "tie.csv", "--retentions", "5000.1,5000.2", "--out", "tie"], tmp)
+    tie = json.loads((tp / "tie.json").read_text())
+    check("same latest valuation date" in " ".join(tie["notes"]), f"tied valuations not noted: {tie['notes']}")
+    check(len(tie["summary"]) == 2 and all(s["years"] == 1 for s in tie["summary"]),
+          f"near-equal options merged: {tie['summary']}")
+    run([LR, "tie.csv", "--as-of", "2026-01-01", "--out", "fut"], tmp)
+    check(json.loads((tp / "fut.json").read_text())["flag_counts"].get("future_valuation") == 1,
+          "future valuation not flagged")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"

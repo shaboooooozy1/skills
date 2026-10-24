@@ -35,7 +35,12 @@ def frontmatter(path):
 
 def house_rules(skill_dir):
     errs, warns = [], []
-    fm, body = frontmatter(skill_dir / "SKILL.md")
+    try:
+        fm, body = frontmatter(skill_dir / "SKILL.md")
+    except yaml.YAMLError:
+        return [], []  # the official validator already reports the parse error
+    if not isinstance(fm, dict):
+        return [], []
     name = str(fm.get("name", ""))
     desc = " ".join(str(fm.get("description", "")).split())
     if name != skill_dir.name:
