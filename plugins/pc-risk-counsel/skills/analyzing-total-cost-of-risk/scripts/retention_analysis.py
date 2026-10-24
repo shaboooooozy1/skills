@@ -57,6 +57,8 @@ def load(path, basis, notes):
         df[c] = df[c].map(to_number) if c in df.columns else float("nan")
     df["valuation_date"] = pd.to_datetime(df.get("valuation_date", ""), errors="coerce")
     df["line"] = df["line"].str.strip().str.upper()
+    df["carrier"] = df["carrier"].str.strip()
+    df["claim_number"] = df["claim_number"].str.strip()  # same keys as summarize_loss_runs.py
     df["policy_year"] = pd.to_numeric(df["policy_year"], errors="coerce").astype("Int64")
     # latest valuation per claim; rows missing carrier or claim number are never merged together
     df = df.sort_values("valuation_date", na_position="first")  # undated rows never win over dated ones

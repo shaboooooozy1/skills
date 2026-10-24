@@ -70,6 +70,8 @@ def compute_period(p, i):
     amount = num(col.get("amount"), f"{label}.collateral.amount")
     rate = num(col.get("cost_rate"), f"{label}.collateral.cost_rate")
     fees = num(col.get("fees"), f"{label}.collateral.fees")
+    if rate < 0:
+        sys.exit(f"{label}.collateral.cost_rate cannot be negative ({rate}).")
     if rate > 1:
         sys.exit(f"{label}.collateral.cost_rate looks like a percent ({rate}). Use a decimal: 0.015 for 1.5%.")
     row["collateral_cost"] = amount * rate + fees

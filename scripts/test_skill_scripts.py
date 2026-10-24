@@ -295,6 +295,26 @@ with tempfile.TemporaryDirectory() as tmp:
     check(json.loads((tp / "fut.json").read_text())["flag_counts"].get("future_valuation") == 1,
           "future valuation not flagged")
 
+    # Codex round on 43ee7a9.
+    check(bp["by_year"][0]["earned_premium"] is None, f"partial year premium shown: {bp['by_year'][0]}")
+    (tp / "mx.csv").write_text(
+        "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
+        "T,2024,WC,W1,2024-03-01,closed,1000,0,2026-09-30\n"
+        " T ,2024,WC, W1 ,2024-03-01,closed,1000,0,2026-06-30\n")
+    (tp / "mx_prem.csv").write_text(
+        "policy_year,line,earned_premium,premium_basis\n2024,WC,10000,written\n2024,GL,5000,\n2024,,5000,\n")
+    run([LR, "mx.csv", "--premium", "mx_prem.csv", "--as-of", "2026-10-24", "--out", "mx"], tmp)
+    mx = json.loads((tp / "mx.json").read_text())
+    check(mx["totals"]["premium_basis"] == "mixed", f"blank basis must count as earned: {mx['totals']}")
+    check(mx["flag_counts"].get("premium_no_line") == 1 and round(mx["totals"]["mixed_premium"]) == 15000,
+          f"blank-line premium not excluded: {mx['totals']} {mx['flag_counts']}")
+    run([RET, "mx.csv", "--retentions", "500", "--out", "mx_ret"], tmp)
+    check(json.loads((tp / "mx_ret.json").read_text())["by_year"][0]["claims"] == 1,
+          "whitespace-padded keys counted the claim twice")
+    (tp / "tc_negrate.json").write_text(json.dumps({"periods": [{"label": "q", "premiums": 1,
+                                                                 "collateral": {"amount": 50000, "cost_rate": -0.02}}]}))
+    check(fails([TCOR, "tc_negrate.json"], "cannot be negative"), "negative collateral rate not rejected")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"

@@ -251,7 +251,8 @@ def year_premium(df, premium, flags):
         missing = sorted(
             ln for ln in claim_lines.get(py, set())
             if ln in unknown_lines or (ln not in known_lines and not (ln not in listed and all_known)))
-        total = yr["earned_premium"].sum(min_count=1)
+        # Any unknown amount makes the year's premium unknown, never a partial sum.
+        total = yr["earned_premium"].sum(min_count=1) if unknown_rows.empty else float("nan")
         if len(unknown_rows):
             flags.append({"row": None, "carrier": "", "claim_number": ylabel(py), "flag": "premium_unreadable",
                           "detail": f"Premium blank or unreadable for {', '.join(sorted(unknown_rows['line']))}. "
@@ -436,8 +437,17 @@ def main():
                                     "total and ratio. Fix the year to include them."})
             premium = premium[premium["policy_year"].notna()].copy()
         premium["line"] = premium["line"].str.strip().str.upper()
+        no_line = premium[premium["line"] == ""]
+        if len(no_line):
+            flags.append({"row": None, "carrier": "", "claim_number": f"({len(no_line)} premium rows)",
+                          "flag": "premium_no_line",
+                          "detail": "Premium rows with a blank line code were left out of every total and ratio. "
+                                    "Give each a line code or ALL."})
+            premium = premium[premium["line"] != ""].copy()
         premium["earned_premium"] = premium["earned_premium"].map(to_number)
-        bases = set(premium.get("premium_basis", pd.Series(dtype=str)).str.strip().str.lower()) - {""}
+        # A blank basis means earned (the default), also in a file where other rows say written.
+        raw_basis = premium["premium_basis"] if "premium_basis" in premium else pd.Series([""] * len(premium))
+        bases = set(raw_basis.str.strip().str.lower().replace("", "earned"))
         basis = "earned" if bases <= {"earned"} else ("written" if bases == {"written"} else "mixed")
 
     ypremium = year_premium(df, premium, flags) if premium is not None else None
