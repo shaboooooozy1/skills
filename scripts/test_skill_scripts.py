@@ -196,6 +196,16 @@ with tempfile.TemporaryDirectory() as tmp:
     check(al25["loss_ratio"] is None, f"year-line with a blank row must be unrated: {al25}")
     check(al["flag_counts"].get("premium_all_and_lines") == 1, f"flags {al['flag_counts']}")
 
+    # A blank premium on a claim-free line (or ALL row) leaves the year unrated too.
+    (tp / "cf.csv").write_text(
+        "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date\n"
+        "T,2024,WC,W1,2024-08-01,closed,5000,0,2026-09-30\n")
+    (tp / "cf_prem.csv").write_text("policy_year,line,earned_premium\n2024,WC,10000\n2024,UMB,\n")
+    run([LR, "cf.csv", "--premium", "cf_prem.csv", "--as-of", "2026-10-24", "--out", "cf"], tmp)
+    cf = json.loads((tp / "cf.json").read_text())
+    check(cf["by_year"][0]["loss_ratio"] is None and cf["totals"]["loss_ratio_years"] == [],
+          f"unknown premium on a claim-free line must leave the year unrated: {cf['by_year'][0]}")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"

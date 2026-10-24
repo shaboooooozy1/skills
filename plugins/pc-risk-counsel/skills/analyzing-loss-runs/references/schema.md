@@ -55,7 +55,7 @@ Number formatting: strip `$` and commas. Parentheses mean negative: `(1,250)` â†
 | earned_premium | yes | Earned, not written, when available |
 | premium_basis | no | `earned` or `written`. When any row says `written`, outputs rename the columns to `written_premium` and `loss_ratio_written` (or `mixed_â€¦`) and the JSON totals carry a `premium_note`. |
 
-Loss ratios are computed only where premium covers the losses: per year and line when that line has premium; per year when every line with claims that year has premium or an ALL row exists. The all-years ratio uses only those covered years and lists them in `loss_ratio_years`. Years left out get a `premium_missing_lines` flag. A blank or unreadable premium amount makes that line's premium unknown for the year: the line is not covered by an ALL row, and its year-line ratio is left blank.
+Loss ratios are computed only where premium covers the losses: per year and line when that line has premium; per year when every line with claims that year has premium or an ALL row exists. The all-years ratio uses only those covered years and lists them in `loss_ratio_years`. Years left out get a `premium_missing_lines` flag. A blank or unreadable premium amount anywhere in a year leaves that year's ratio blank, because the total premium is unknown. Its year-line ratio is also left blank, and a listed line with a blank amount is never treated as covered by an ALL row.
 
 ## Extraction tips
 

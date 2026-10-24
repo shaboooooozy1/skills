@@ -224,7 +224,8 @@ def year_premium(df, premium, flags):
       - any premium row for that line is blank or unreadable -> not covered (premium partly unknown)
       - the line has known premium rows -> covered
       - the line is not listed -> covered only by a known ALL row (ALL = lines not listed separately)
-    A year's loss ratio is computed only when every line with claims is covered.
+    A year's loss ratio is computed only when every line with claims is covered and no premium
+    amount that year is unknown (an unknown amount anywhere makes the denominator unknown).
     """
     def ylabel(py):
         return f"(policy year {int(py)})"
@@ -256,7 +257,10 @@ def year_premium(df, premium, flags):
             flags.append({"row": None, "carrier": "", "claim_number": ylabel(py), "flag": "premium_missing_lines",
                           "detail": f"Premium missing or unknown for {', '.join(missing)}. "
                                     "Year loss ratio not computed."})
-        rows.append({"policy_year": py, "earned_premium": total, "premium_complete": not missing})
+        # Any unknown premium amount that year leaves the denominator unknown, even on a
+        # claim-free line or an ALL row, so the year stays unrated.
+        rows.append({"policy_year": py, "earned_premium": total,
+                     "premium_complete": not missing and len(unknown_rows) == 0})
     out = pd.DataFrame(rows)
     out["policy_year"] = out["policy_year"].astype("Int64")
     return out
