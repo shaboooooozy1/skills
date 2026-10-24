@@ -706,6 +706,20 @@ with tempfile.TemporaryDirectory() as tmp:
     check(json.loads((tp / "emp.json").read_text())["totals"]["earned_premium"] is None,
           "empty premium file reported as $0 premium")
 
+    # Codex round on ef49e5b.
+    for nm in (None, 5):
+        (tp / "tc_nm.json").write_text(json.dumps({"exposure_base": {"name": nm, "per": 1},
+                                                   "periods": [{"label": "P", "premiums": 1000, "exposure": 10}]}))
+        if nm is None:
+            run([TCOR, "tc_nm.json", "--out", "tc_nm_out"], tmp)
+            check((tp / "tc_nm_out.json").exists(), "exposure_base.name null crashed TCOR")
+        else:
+            check(fails([TCOR, "tc_nm.json"], "exposure_base.name"), "numeric exposure_base.name crashed TCOR")
+    run([RET, "eq.csv", "--retentions", "1000", "--aggregate", "0", "--years", "2023-2024",
+         "--immature-years", "none", "--out", "agg0"], tmp)
+    a0 = json.loads((tp / "agg0.json").read_text())["summary"][0]
+    check(a0["years_aggregate_hit"] == 1, f"claim-free year counted as hitting a $0 aggregate: {a0['years_aggregate_hit']}")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"

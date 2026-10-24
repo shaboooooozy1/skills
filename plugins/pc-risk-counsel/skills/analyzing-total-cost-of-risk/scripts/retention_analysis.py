@@ -360,7 +360,8 @@ def main():
             g = df[df["policy_year"] == y]
             per_claim = g["amount"].clip(upper=ret)
             retained = float(per_claim.sum())
-            capped = bool(agg is not None and retained >= agg)  # reaching the cap exactly exhausts it
+            # reaching the cap exactly exhausts it; a year with no retained loss never "hits" a $0 aggregate
+            capped = bool(agg is not None and retained > 0 and retained >= agg)
             if agg is not None and retained > agg:
                 retained = agg
             total = float(g["amount"].sum())

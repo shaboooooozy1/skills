@@ -179,7 +179,12 @@ def main():
         base = {}  # null = same defaults as leaving it out
     if not isinstance(base, dict):
         sys.exit("exposure_base must be an object like {\"name\": \"payroll\", \"per\": 100}.")
-    base_name = base.get("name", "exposure")
+    base_name = base.get("name")
+    if base_name is None:
+        base_name = "exposure"  # null = default
+    if not isinstance(base_name, str) or not base_name.strip():
+        sys.exit("exposure_base.name must be text, e.g. \"payroll\" or \"vehicles\".")
+    base_name = base_name.strip()
     per = num(base.get("per", 1000), "exposure_base.per")
     if per <= 0:
         sys.exit("exposure_base.per must be a positive number, e.g. 1000 for per $1,000 or 1 for per unit.")
