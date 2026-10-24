@@ -55,6 +55,15 @@ def guard_outputs(inputs, out):
         sys.exit(f"--out {out} would overwrite the input {hit[0]}. Choose a different --out name.")
 
 
+def no_duplicate_keys(pairs):
+    """json.load keeps only the last of two equal keys, which would silently drop an input amount."""
+    keys = [k for k, _ in pairs]
+    dupes = sorted({k for k in keys if keys.count(k) > 1})
+    if dupes:
+        sys.exit(f"inputs.json repeats the key(s) {', '.join(dupes)} in one object. Combine or rename them.")
+    return dict(pairs)
+
+
 def num(v, where):
     if v is None or v == "":
         return 0.0
@@ -156,7 +165,7 @@ def main():
     guard_outputs([a.inputs], a.out)
 
     with open(a.inputs) as f:
-        cfg = json.load(f)
+        cfg = json.load(f, object_pairs_hook=no_duplicate_keys)
     periods = cfg.get("periods") or []
     if not periods:
         sys.exit("inputs.json needs a non-empty 'periods' list.")

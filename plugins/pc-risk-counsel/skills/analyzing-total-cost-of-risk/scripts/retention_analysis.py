@@ -259,7 +259,11 @@ def main():
 
     notes = []
     rets = money_list(a.retentions, "retentions")
-    aggs = money_list(a.aggregate, "aggregate") if a.aggregate else []
+    for name, val in (("aggregate", a.aggregate), ("lines", a.lines), ("years", a.years),
+                      ("immature-years", a.immature_years)):
+        if val is not None and not val.replace(",", "").replace(";", "").strip():
+            sys.exit(f"--{name} was given but is empty. Leave the flag out or give a value.")
+    aggs = money_list(a.aggregate, "aggregate") if a.aggregate is not None else []
     if aggs and len(aggs) not in (1, len(rets)):
         sys.exit("--aggregate needs one value, or one per retention option.")
     if len(aggs) == 1:
@@ -287,9 +291,12 @@ def main():
     if a.years:
         try:
             lo, _, hi = a.years.partition("-")
-            years = list(range(int(lo), int(hi or lo) + 1))
+            lo_y, hi_y = int(lo), int(hi or lo)
         except ValueError:
             sys.exit("--years must look like 2021-2025 or 2024")
+        if not (1900 <= lo_y <= hi_y <= 2100):
+            sys.exit(f"--years {a.years} is not a valid range of four-digit years, e.g. 2021-2025.")
+        years = list(range(lo_y, hi_y + 1))
     else:
         years = sorted(int(y) for y in df["policy_year"].dropna().unique())
     outside = df[~df["policy_year"].isin(years)]
@@ -297,7 +304,7 @@ def main():
         notes.append(f"{len(outside)} claim(s) fall outside --years and were left out.")
         df = df[df["policy_year"].isin(years)]
     if a.lines:
-        keep = {x.strip().upper() for x in a.lines.split(",")}
+        keep = {x.strip().upper() for x in a.lines.split(",") if x.strip()}
         df = df[df["line"].isin(keep)]
         notes.append(f"Lines included: {', '.join(sorted(keep))}.")
     if not years:

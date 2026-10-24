@@ -549,6 +549,13 @@ def main():
                           "detail": "Premium rows with a blank line code were left out of every total and ratio. "
                                     "Give each a line code or ALL."})
             premium = premium[premium["line"] != ""].copy()
+        odd = premium[~premium["line"].isin(LINE_CODES | {"ALL"})]
+        if len(odd):
+            flags.append({"row": None, "carrier": "", "claim_number": f"({len(odd)} premium rows)",
+                          "flag": "premium_unknown_line",
+                          "detail": f"Premium line code(s) {', '.join(sorted(set(odd['line'])))} are not schema codes. "
+                                    "Those rows were left out of every total and ratio. Fix the code or use OTHER."})
+            premium = premium[premium["line"].isin(LINE_CODES | {"ALL"})].copy()
         premium["earned_premium"] = premium["earned_premium"].map(to_number).astype(float)  # float even if empty
         # A blank basis means earned (the default), also in a file where other rows say written.
         raw_basis = premium["premium_basis"] if "premium_basis" in premium else pd.Series([""] * len(premium))

@@ -573,6 +573,20 @@ with tempfile.TemporaryDirectory() as tmp:
     (tp / "tc_list2.json").write_text(json.dumps({"periods": [{"label": "P", "premiums": 1000, "admin": [5]}]}))
     check(fails([TCOR, "tc_list2.json"], "not a list"), "list component accepted")
 
+    # Codex round on 850eaa4.
+    (tp / "tc_dupk.json").write_text('{"periods": [{"label": "P", "premiums": {"WC": 1000, "WC": 50}}]}')
+    check(fails([TCOR, "tc_dupk.json"], "repeats the key"), "duplicate JSON key silently dropped a premium")
+    (tp / "pl_prem.csv").write_text("policy_year,line,earned_premium\n2024,GL,10000\n2024,GLL,5000\n")
+    run([LR, "mm.csv", "--premium", "pl_prem.csv", "--as-of", "2026-10-24", "--out", "pl"], tmp)
+    pl = json.loads((tp / "pl.json").read_text())
+    check(pl["flag_counts"].get("premium_unknown_line") == 1 and pl["totals"]["earned_premium"] == 10000,
+          f"premium line typo summed into the denominator: {pl['flag_counts']}, {pl['totals'].get('earned_premium')}")
+    check(fails([RET, "mm.csv", "--retentions", "1000", "--years", "20245"], "four-digit"), "--years 20245 accepted")
+    for flag_name in ("--lines", "--aggregate", "--immature-years"):
+        for empty in ("", ","):
+            check(fails([RET, "mm.csv", "--retentions", "1000", flag_name, empty], "is empty"),
+                  f"empty {flag_name} {empty!r} accepted")
+
     # Security review: carrier text starting with '=' must stay text, never a live formula.
     (tp / "inj.csv").write_text(
         "carrier,policy_year,line,claim_number,loss_date,status,paid_loss,outstanding_loss,valuation_date,cause\n"
