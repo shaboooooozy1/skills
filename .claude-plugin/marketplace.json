@@ -50,6 +50,15 @@
       "skills": [
         "./skills/apollo-enrich-lead"
       ]
+    },
+    {
+      "name": "imc-growth-desk",
+      "description": "Commercial insurance growth workflows and validated pipeline analysis for IMC/HUB Erie.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/imc-growth-desk"
+      ]
     }
   ]
 }
