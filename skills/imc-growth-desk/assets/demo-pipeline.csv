@@ -1,0 +1,6 @@
+opportunity_id,account,stage,owner,annual_revenue,currency,probability,next_action,due_date,last_contact_date,renewal_date,source_url,verified_at
+DEMO-001,Fictional Lake Works,proposal,Demo owner,18000,USD,0.50,Confirm decision meeting,2026-10-30,2026-10-28,2026-12-01,https://example.com/demo/001,2026-11-02
+DEMO-002,Fictional Ridge Builders,discovery,Demo owner,,USD,,Request project schedule,2026-11-02,2026-10-29,2027-01-15,https://example.com/demo/002,2026-11-02
+DEMO-003,Fictional Harbor Properties,qualified,Demo owner,12000,USD,0.25,Arrange exposure review,2026-11-06,2026-10-15,2027-02-01,https://example.com/demo/003,2026-11-02
+DEMO-004,Fictional Community Services,prospect,Demo owner,,,,,2026-11-10,,,,
+DEMO-005,Fictional Closed Account,won,Demo owner,9000,USD,1,Confirm service handoff,2026-11-02,2026-11-01,2027-10-31,https://example.com/demo/005,2026-11-02

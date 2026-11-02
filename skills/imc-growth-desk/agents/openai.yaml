@@ -1,0 +1,4 @@
+interface:
+  display_name: "IMC Growth Desk"
+  short_description: "Turn account signals into focused sales action"
+  default_prompt: "Use $imc-growth-desk to prioritize my commercial insurance opportunities and prepare my next three actions."
