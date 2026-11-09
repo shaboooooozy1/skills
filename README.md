@@ -21,6 +21,15 @@ Many skills in this repo are open source (Apache 2.0). We've also included the d
 
 **These skills are provided for demonstration and educational purposes only.** While some of these capabilities may be available in Claude, the implementations and behaviors you receive from Claude may differ from what is shown in these skills. These skills are meant to illustrate patterns and possibilities. Always test skills thoroughly in your own environment before relying on them for critical tasks.
 
+## Research and development workflow
+
+The [research-to-pr skill](./skills/research-to-pr/SKILL.md), available in the
+`research-development` plugin, combines GitHub repository context, Firecrawl
+research, and implementation checks in a cloud or local development environment.
+It guides a focused task from current source evidence to a validated patch or
+draft pull request. Connect the required services separately in your host;
+installing the skill does not connect accounts or schedule background work.
+
 # Skill Sets
 - [./skills](./skills): Skill examples for Creative & Design, Development & Technical, Enterprise & Communication, and Document Skills
 - [./spec](./spec): The Agent Skills specification
