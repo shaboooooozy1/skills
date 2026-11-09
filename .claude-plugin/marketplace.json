@@ -43,6 +43,15 @@
       ]
     },
     {
+      "name": "research-development",
+      "description": "Research repository improvements with Firecrawl, validate changes in a development environment, and deliver patches or draft pull requests through GitHub",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/research-to-pr"
+      ]
+    },
+    {
       "name": "apollo",
       "description": "Sales prospecting skills backed by Apollo data tools",
       "source": "./",
